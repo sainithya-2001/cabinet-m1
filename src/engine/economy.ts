@@ -90,7 +90,7 @@ export function calculateYearFinances(
 }
 /** Pure yearly resolver shared by live projection and actual resolution. */
 export function resolveYear(previous: CountryState, budget: Budget, inputs: YearInputs): YearResolution {
-  const validation = validateBudget(budget, inputs.emergencyBorrowing ? 50 : PARAMETERS.borrowing.max);
+  const validation = validateBudget(budget);
   if (validation.length) throw new Error(`Invalid budget: ${validation.join(' ')}`);
   if (previous.collapsed) throw new Error('Cannot resolve a year after collapse.');
 

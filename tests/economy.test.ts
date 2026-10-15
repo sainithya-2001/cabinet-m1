@@ -170,7 +170,7 @@ describe('Cabinet economy engine M1', () => {
     }
   });
 
-    
+
 it('reconciles every explanation line exactly to the resulting indicator', () => {
     const result = resolveYear(
       createInitialState(),
@@ -195,7 +195,7 @@ it('reconciles every explanation line exactly to the resulting indicator', () =>
       expect(result.state[key]).toBe(item.after);
     }
   });
-  it('applies extra revenue and emergency borrowing inputs', () => {
+    it('applies extra revenue and emergency borrowing inputs', () => {
     const state = createInitialState();
     const budget = defaultBudget();
 
@@ -212,13 +212,44 @@ it('reconciles every explanation line exactly to the resulting indicator', () =>
     });
 
     expect(withExtraRevenue.revenue).toBe(normal.revenue + 10);
-    expect(withEmergencyBorrowing.availableFunds).toBe(
-      normal.availableFunds + 10
-    );
-    expect(withEmergencyBorrowing.state.debt).toBeGreaterThan(
-      normal.state.debt
-    );
+    expect(withEmergencyBorrowing.availableFunds).toBe(normal.availableFunds + 10);
+    expect(withEmergencyBorrowing.state.debt).toBeGreaterThan(normal.state.debt);
   });
+
+  it('enforces the regular and combined emergency borrowing caps', () => {
+    const state = createInitialState();
+    const budget = defaultBudget();
+
+    // Regular borrowing above 30 B must be rejected, even with emergency borrowing.
+    expect(() =>
+      resolveYear(
+        state,
+        { ...budget, borrowing: 35 },
+        { ...baseInputs, emergencyBorrowing: 10 },
+      ),
+    ).toThrow(/Invalid budget|exceeds this year's cap/);
+
+    // Regular borrowing of 30 B plus emergency borrowing of 20 B is allowed.
+    expect(() =>
+      resolveYear(
+        state,
+        { ...budget, borrowing: 30 },
+        { ...baseInputs, emergencyBorrowing: 20 },
+      ),
+    ).not.toThrow();
+
+    // Combined borrowing above 50 B must be rejected.
+    expect(() =>
+      resolveYear(
+        state,
+        { ...budget, borrowing: 30 },
+        { ...baseInputs, emergencyBorrowing: 25 },
+      ),
+    ).toThrow(/Invalid budget|exceeds this year's cap/);
+  });
+
+
+
 
 
   it('is deterministic for the same state, budget, and inputs', () => {
@@ -244,7 +275,7 @@ it('reconciles every explanation line exactly to the resulting indicator', () =>
     );
   });
 
-  
+
   it('enumerates hidden values and contains actual outcomes across scenarios', () => {
     const rng = mulberry32(20261016);
     const indicators = [
@@ -290,7 +321,7 @@ it('reconciles every explanation line exactly to the resulting indicator', () =>
 
       const revenueMin = 90;
       const revenueMax = 110;
-      
+
 const baseInputsForProjection = {
   revenueTradeModifier: 0 as const,
   interestRate: 0.05 as const,
@@ -332,7 +363,7 @@ const baseInputsForProjection = {
   });
 
 
-   
+
   it('adds an explicit limit line when clamping occurs', () => {
     const state = {
       ...createInitialState(),
@@ -546,8 +577,8 @@ const baseInputsForProjection = {
     ).toBe(false);
   });
 
-  
- 
+
+
   it('applies Education delayed Economy effects after two years', () => {
     const budget = defaultBudget();
     budget.shares.education = 100;
