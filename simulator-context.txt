@@ -1,0 +1,626 @@
+==== STRATEGIES ====
+
+import { defaultBudget } from '../engine/index.js';
+import type { Budget, CountryState } from '../engine/index.js';
+const RECKLESS_FUNDING_MULTIPLIER = 1.3;
+
+export function recklessTargetSpending(
+  needs: Record<
+    'health' | 'education' | 'security' | 'infrastructure' | 'environment' | 'industry',
+    number
+  >,
+) {
+  return {
+    health: needs.health * RECKLESS_FUNDING_MULTIPLIER,
+    education: needs.education * RECKLESS_FUNDING_MULTIPLIER,
+    security: needs.security * RECKLESS_FUNDING_MULTIPLIER,
+    infrastructure: needs.infrastructure * RECKLESS_FUNDING_MULTIPLIER,
+    environment: needs.environment * RECKLESS_FUNDING_MULTIPLIER,
+    industry: needs.industry * RECKLESS_FUNDING_MULTIPLIER,
+  };
+}
+
+export function canAffordRecklessTargets(
+  availableFunds: number,
+  needs: Record<
+    'health' | 'education' | 'security' | 'infrastructure' | 'environment' | 'industry',
+    number
+  >,
+): boolean {
+  const targets = recklessTargetSpending(needs);
+  const totalTargetSpending = Object.values(targets).reduce(
+    (total, amount) => total + amount,
+    0,
+  );
+
+  return availableFunds >= totalTargetSpending;
+}
+
+
+export function planRecklessBudget(
+  availableFunds: number,
+  needs: Record<
+    'health' | 'education' | 'security' | 'infrastructure' | 'environment' | 'industry',
+    number
+  >,
+): { budget: Budget; affordable: boolean } {
+  const targets = recklessTargetSpending(needs);
+  const totalTargets = Object.values(targets).reduce(
+    (total, amount) => total + amount,
+    0,
+  );
+
+  const budget = defaultBudget();
+  const sectors = [
+    'health',
+    'education',
+    'security',
+    'infrastructure',
+    'environment',
+    'industry',
+  ] as const;
+
+  const rawShares = sectors.map((sector) => ({
+    sector,
+    exact: totalTargets > 0 ? (targets[sector] / totalTargets) * 100 : 0,
+  }));
+
+  for (const item of rawShares) {
+    budget.shares[item.sector] = Math.floor(item.exact);
+  }
+
+  let remaining = 100 - sectors.reduce(
+    (total, sector) => total + budget.shares[sector],
+    0,
+  );
+
+  const byRemainder = [...rawShares].sort(
+    (a, b) =>
+      (b.exact - Math.floor(b.exact)) -
+      (a.exact - Math.floor(a.exact)),
+  );
+
+  for (const item of byRemainder) {
+    if (remaining <= 0) break;
+    budget.shares[item.sector] += 1;
+    remaining -= 1;
+  }
+
+  budget.shares.debtRepayment = 0;
+  budget.borrowing = 30;
+
+  return {
+    budget,
+    affordable: canAffordRecklessTargets(availableFunds, needs),
+  };
+}
+
+
+export type StrategyName =
+  | 'balanced'
+  | 'greedy-agenda'
+  | 'reckless'
+  | 'mole';
+
+export const STRATEGY_VERSIONS: Record<StrategyName, string> = {
+  balanced: 'balanced-v0.1.1',
+  'greedy-agenda': 'greedy-agenda-v0.1.0',
+  reckless: 'reckless-v0.1.2',
+  mole: 'mole-placeholder-v0.1.0',
+};
+
+type Target = 'economy' | 'happiness' | 'stability' | 'environment';
+
+function weakestIndicator(state: CountryState): Target {
+  const values: Record<Target, number> = {
+    economy: state.economy,
+    happiness: state.happiness,
+    stability: state.stability,
+    environment: state.environment,
+  };
+
+  // Prioritize indicators closest to their collapse thresholds,
+  // accounting for their different starting values and thresholds.
+  const thresholds: Record<Target, number> = {
+    economy: 15,
+    happiness: 15,
+    stability: 15,
+    environment: 10,
+  };
+
+  const risk = (indicator: Target) =>
+    (state[indicator] - thresholds[indicator]) /
+    (100 - thresholds[indicator]);
+
+  return (Object.keys(values) as Target[]).reduce((weakest, current) =>
+    risk(current) < risk(weakest) ? current : weakest,
+  );
+}
+
+/**
+ * Initial heuristic agents. These are not final tuned AI policies.
+ */
+
+export function chooseBudget(
+  strategy: StrategyName,
+  state: CountryState,
+  target: Target = 'economy',
+  planningContext?: {
+    availableFunds: number;
+    needs: Record<
+      'health' | 'education' | 'security' | 'infrastructure' | 'environment' | 'industry',
+      number
+    >;
+  },
+): Budget {
+
+  const budget = defaultBudget();
+
+  if (strategy === 'balanced') {
+    const priority = weakestIndicator(state);
+    const sectorByTarget = {
+      economy: 'industry',
+      happiness: 'health',
+      stability: 'security',
+      environment: 'environment',
+    } as const;
+
+    const sector = sectorByTarget[priority];
+    budget.shares[sector] += 10;
+    budget.shares.debtRepayment -= 10;
+    return budget;
+  }
+
+  if (strategy === 'greedy-agenda') {
+    const sectorByTarget = {
+      economy: 'industry',
+      happiness: 'health',
+      stability: 'security',
+      environment: 'environment',
+    } as const;
+
+    const sector = sectorByTarget[target];
+    budget.shares[sector] += 10;
+    budget.shares.debtRepayment -= 10;
+    return budget;
+  }
+
+  
+if (strategy === 'reckless') {
+  if (planningContext) {
+    return planRecklessBudget(
+      planningContext.availableFunds,
+      planningContext.needs,
+    ).budget;
+  }
+
+  budget.borrowing = 30;
+  budget.shares.industry += budget.shares.debtRepayment;
+  budget.shares.debtRepayment = 0;
+  return budget;
+}
+
+
+  // Placeholder only: this is not actual Mole sabotage.
+  if (state.debt > 60) {
+    budget.shares.debtRepayment += 5;
+    budget.shares.industry -= 5;
+  } else {
+    budget.shares.industry += 5;
+    budget.shares.debtRepayment -= 5;
+  }
+
+  return budget;
+}
+==== SIMULATION ====
+
+
+import {
+  createInitialState,
+  makeCrisis,
+  mulberry32,
+  resolveYear,
+  sectorNeeds,
+  calculateYearFinances,
+  PARAMETERS,
+  PARAMS_VERSION,
+} from '../engine/index.js';
+
+
+import type { InterestRate, TradeModifier } from '../engine/index.js';
+import { chooseBudget, STRATEGY_VERSIONS } from './strategies.js';
+import type { StrategyName } from './strategies.js';
+
+const DEFAULT_SEEDS = 1000;
+
+const STRATEGIES: StrategyName[] = [
+  'balanced',
+  'greedy-agenda',
+  'reckless',
+  'mole',
+];
+
+const rates: InterestRate[] = [0.03, 0.05, 0.08];
+const trade: TradeModifier[] = [-8, -4, 0, 4, 8];
+
+const cards = [
+  'outbreak',
+  'floods',
+  'border-tension',
+  'recession',
+  'heatwave',
+  'teacher-strike',
+  'cyberattack',
+  'housing-shortage',
+  'energy-price-spike',
+  'protests',
+  'export-boom',
+  'tech-breakthrough',
+];
+
+const targets = ['economy', 'happiness', 'stability', 'environment'] as const;
+
+function pick<T>(rng: () => number, items: readonly T[]): T {
+  return items[Math.floor(rng() * items.length)]!;
+}
+
+interface YearConditions {
+  crisisId: string;
+  severity: 1 | 2 | 3;
+  revenueTradeModifier: TradeModifier;
+  interestRate: InterestRate;
+}
+
+export function createConditions(seed: number): YearConditions[] {
+  const rng = mulberry32(seed);
+
+  // Year 1 always uses the fixed tutorial outbreak.
+  // The remaining cards are shuffled deterministically.
+  const remainingCards = cards.filter(
+    (card) => card !== 'outbreak'
+  );
+
+  for (let i = remainingCards.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [remainingCards[i], remainingCards[j]] = [
+      remainingCards[j]!,
+      remainingCards[i]!,
+    ];
+  }
+
+  const conditions: YearConditions[] = [];
+
+  for (let year = 1; year <= 8; year++) {
+    conditions.push({
+      crisisId:
+        year === 1 ? 'outbreak' : remainingCards[year - 2]!,
+      severity: (
+        year === 1 ? 1 : pick(rng, [1, 1, 2, 2, 3])
+      ) as 1 | 2 | 3,
+      revenueTradeModifier: pick(rng, trade),
+      interestRate: pick(rng, rates),
+    });
+  }
+
+  return conditions;
+}
+export interface SimulationOptions {
+  seeds?: number;
+}
+
+export interface StrategyResult {
+  strategy: StrategyName;
+  strategyVersion: string;
+  seeds: number;
+  survivalRate: number;
+  averageYearsResolved: number;
+  collapsedGames: number;
+  collapseReasons: Record<string, number>;
+}
+
+export function runSimulation(options: SimulationOptions = {}) {
+  const seeds = Math.max(
+    1,
+    Math.floor(options.seeds ?? DEFAULT_SEEDS)
+  );
+
+  const conditionsBySeed = new Map<number, YearConditions[]>();
+
+  for (let seed = 1; seed <= seeds; seed++) {
+    conditionsBySeed.set(seed, createConditions(seed));
+  }
+
+  function runStrategy(strategy: StrategyName): StrategyResult {
+    let survived = 0;
+    let yearsTotal = 0;
+    const collapses: Record<string, number> = {};
+
+    for (let seed = 1; seed <= seeds; seed++) {
+      const conditions = conditionsBySeed.get(seed)!;
+      const strategyRng = mulberry32(seed + 1_000_000);
+      let state = createInitialState();
+
+      for (let year = 1; year <= 8 && !state.collapsed; year++) {
+        
+const condition = conditions[year - 1]!;
+const crisis = makeCrisis(condition.crisisId, condition.severity);
+
+const planningInputs = {
+  revenueTradeModifier: condition.revenueTradeModifier,
+  interestRate: condition.interestRate,
+  crisis,
+};
+
+const budget =
+  strategy === 'reckless'
+    ? chooseBudget(
+        strategy,
+        state,
+        pick(strategyRng, targets),
+        {
+          
+	
+
+          needs: sectorNeeds(planningInputs),
+        },
+
+ 
+availableFunds: calculateYearFinances(
+  state,
+  { ...chooseBudget('reckless', state), borrowing: 30 },
+  planningInputs,
+).availableFunds,
+
+
+      )
+    : chooseBudget(strategy, state, pick(strategyRng, targets));
+
+
+        
+const result = resolveYear(state, budget, planningInputs);
+
+
+        state = result.state;
+        yearsTotal++;
+
+        if (state.collapsed) {
+          for (const reason of state.collapseReasons) {
+            collapses[reason] = (collapses[reason] ?? 0) + 1;
+          }
+        }
+      }
+
+      if (!state.collapsed) survived++;
+    }
+
+    return {
+      strategy,
+      strategyVersion: STRATEGY_VERSIONS[strategy],
+      seeds,
+      survivalRate: survived / seeds,
+      averageYearsResolved: yearsTotal / seeds,
+      collapsedGames: seeds - survived,
+      collapseReasons: collapses,
+    };
+  }
+
+  return {
+    comparisonVersion: 'strategy-comparison-v0.2.0',
+    paramsVersion: PARAMS_VERSION,
+    note: 'Shared environmental conditions per seed. Mole sabotage is not implemented.',
+    results: STRATEGIES.map(runStrategy),
+  };
+}==== STRATEGY TESTS ====
+
+import { describe, expect, it } from 'vitest';
+import { createInitialState, validateBudget } from '../src/engine/index.js';
+
+import {
+  canAffordRecklessTargets,
+  chooseBudget,
+  planRecklessBudget,
+  recklessTargetSpending,
+} from '../src/simulator/strategies.js';
+
+
+describe('Cabinet strategy agents', () => {
+  const strategies = [
+    'balanced',
+    'greedy-agenda',
+    'reckless',
+    'mole',
+  ] as const;
+
+  for (const strategy of strategies) {
+    it(`${strategy} produces a valid budget`, () => {
+      const budget = chooseBudget(strategy, createInitialState());
+
+      expect(
+        Object.values(budget.shares).reduce((sum, share) => sum + share, 0),
+      ).toBe(100);
+
+      expect(validateBudget(budget)).toEqual([]);
+    });
+  }
+
+  it('greedy-agenda can prioritize different targets', () => {
+    const state = createInitialState();
+
+    const economy = chooseBudget('greedy-agenda', state, 'economy');
+    const happiness = chooseBudget('greedy-agenda', state, 'happiness');
+
+    expect(economy.shares.industry).toBeGreaterThan(happiness.shares.industry);
+    expect(happiness.shares.health).toBeGreaterThan(economy.shares.health);
+  });
+it('reckless always borrows 30 and allocates nothing to debt repayment', () => {
+  const budget = chooseBudget('reckless', createInitialState());
+
+  expect(budget.borrowing).toBe(30);
+  expect(budget.shares.debtRepayment).toBe(0);
+  expect(
+    Object.values(budget.shares).reduce((sum, share) => sum + share, 0),
+  ).toBe(100);
+});
+it('calculates Reckless targets at 1.3 times each sector need', () => {
+  expect(
+    recklessTargetSpending({
+      health: 20,
+      education: 14,
+      security: 14,
+      infrastructure: 16,
+      environment: 10,
+      industry: 14,
+    }),
+  ).toEqual({
+    health: 26,
+    education: 18.2,
+    security: 18.2,
+    infrastructure: 20.8,
+    environment: 13,
+    industry: 18.2,
+  });
+});
+});
+
+it('checks whether Reckless target spending is affordable', () => {
+  const needs = {
+    health: 20,
+    education: 14,
+    security: 14,
+    infrastructure: 16,
+    environment: 10,
+    industry: 14,
+  };
+
+  expect(canAffordRecklessTargets(115, needs)).toBe(true);
+  expect(canAffordRecklessTargets(114, needs)).toBe(false);
+});
+
+it('plans a valid Reckless budget and reports affordability', () => {
+  const needs = {
+    health: 20,
+    education: 14,
+    security: 14,
+    infrastructure: 16,
+    environment: 10,
+    industry: 14,
+  };
+
+  const affordablePlan = planRecklessBudget(115, needs);
+  const unaffordablePlan = planRecklessBudget(114, needs);
+
+  expect(affordablePlan.affordable).toBe(true);
+  expect(unaffordablePlan.affordable).toBe(false);
+
+  expect(affordablePlan.budget.borrowing).toBe(30);
+  expect(affordablePlan.budget.shares.debtRepayment).toBe(0);
+  expect(
+    Object.values(affordablePlan.budget.shares).reduce(
+      (sum, share) => sum + share,
+      0,
+    ),
+  ).toBe(100);
+
+  for (const share of Object.values(affordablePlan.budget.shares)) {
+    expect(Number.isInteger(share)).toBe(true);
+  }
+});
+
+it('uses the planning context for the Reckless budget', () => {
+  const needs = {
+    health: 20,
+    education: 14,
+    security: 14,
+    infrastructure: 16,
+    environment: 10,
+    industry: 14,
+  };
+
+  const budget = chooseBudget(
+    'reckless',
+    createInitialState(),
+    'economy',
+    { availableFunds: 115, needs },
+  );
+
+  expect(budget.borrowing).toBe(30);
+  expect(budget.shares.debtRepayment).toBe(0);
+  expect(
+    Object.values(budget.shares).reduce((sum, share) => sum + share, 0),
+  ).toBe(100);
+  expect(budget.shares).toEqual(
+    planRecklessBudget(115, needs).budget.shares,
+  );
+});
+
+==== SIMULATION TESTS ====
+import { describe, expect, it } from 'vitest';
+import { createConditions, runSimulation } from '../src/simulator/simulation.js';
+
+describe('Cabinet simulator', () => {
+  it('produces identical results for repeated runs with the same seed count', () => {
+    const first = runSimulation({ seeds: 10 });
+    const second = runSimulation({ seeds: 10 });
+
+    expect(first).toEqual(second);
+  });
+
+  it('reports the requested seed count for every strategy', () => {
+    const result = runSimulation({ seeds: 5 });
+
+    expect(result.results).toHaveLength(4);
+
+    for (const strategy of result.results) {
+      expect(strategy.seeds).toBe(5);
+    }
+  });
+it('uses the fixed tutorial crisis and avoids repeating crises', () => {
+  const first = createConditions(123);
+  const second = createConditions(123);
+
+  expect(first).toEqual(second);
+  expect(first).toHaveLength(8);
+  expect(first[0]).toMatchObject({
+    crisisId: 'outbreak',
+    severity: 1,
+  });
+
+  const crisisIds = first.map(year => year.crisisId);
+  expect(new Set(crisisIds).size).toBe(8);
+});
+});==== PARAMETERS ====
+import type { Indicator, Sector } from './types.js';
+
+/** Versioned tuning knobs. Values marked provisional should be calibrated by the simulator. */
+export const PARAMS_VERSION = '0.1.1';
+export const PARAMETERS = {
+  initialState: { economy: 50, happiness: 55, stability: 55, environment: 50, debt: 40 },
+  collapseLines: { economy: 15, happiness: 15, stability: 15, environment: 10, debt: 100 },
+  indicatorCaps: { economy: [0, 100], happiness: [0, 100], stability: [0, 100], environment: [0, 100], debt: [0, 150] } as Record<Indicator, [number, number]>,
+  revenue: { base: 100, economyFactor: 0.8, min: 60, max: 140 },
+  borrowing: { min: 0, max: 30, step: 5, debtFactor: 0.6 },
+  repaymentDebtReductionPerB: 0.5,
+  sectorNeeds: { health: 20, education: 14, security: 14, infrastructure: 16, environment: 10, industry: 14 } as Record<Exclude<Sector, 'debtRepayment'>, number>,
+  sectorEffects: {
+    health: { happiness: 12, economy: 3 },
+    education: { happiness: 4, delayedEconomy: 10, delayedYears: 2 },
+    security: { stability: 14 },
+    infrastructure: { stability: 4, delayedEconomy: 10, delayedYears: 1 },
+    environment: { environment: 12, happiness: 3 },
+    industry: { economy: 10 }
+  },
+  industryPollutionPerNeed: 2.5,
+  environmentDrift: -1,
+  /** Shutdown applies 80% of the last passed budget; provisional representation is shares unchanged. */
+  shutdown: { stabilityPenalty: -5, budgetScale: 0.8 },
+} as const;
+
+export const SECTORS: Sector[] = ['health', 'education', 'security', 'infrastructure', 'environment', 'industry', 'debtRepayment'];
+export const INDICATORS: Indicator[] = ['economy', 'happiness', 'stability', 'environment', 'debt'];
+
+export function collapseReasons(values: Record<Indicator, number>): Indicator[] {
+  return INDICATORS.filter((indicator) => {
+    const line = PARAMETERS.collapseLines[indicator];
+    return indicator === 'debt' ? values.debt >= line : values[indicator] <= line;
+  });
+}

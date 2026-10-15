@@ -1,0 +1,61 @@
+{
+  "comparisonVersion": "strategy-comparison-v0.2.0",
+  "paramsVersion": "0.1.1",
+  "note": "Shared environmental conditions per seed. Mole sabotage is not implemented.",
+  "results": [
+    {
+      "strategy": "balanced",
+      "strategyVersion": "balanced-v0.1.1",
+      "seeds": 10000,
+      "survivalRate": 0.9173,
+      "averageYearsResolved": 7.9713,
+      "collapsedGames": 827,
+      "collapseReasons": {
+        "economy": 469,
+        "stability": 205,
+        "environment": 280,
+        "happiness": 10
+      }
+    },
+    {
+      "strategy": "greedy-agenda",
+      "strategyVersion": "greedy-agenda-v0.1.0",
+      "seeds": 10000,
+      "survivalRate": 0.6121,
+      "averageYearsResolved": 7.7393,
+      "collapsedGames": 3879,
+      "collapseReasons": {
+        "economy": 1909,
+        "stability": 333,
+        "environment": 1958,
+        "happiness": 9
+      }
+    },
+    {
+      "strategy": "reckless",
+      "strategyVersion": "reckless-v0.1.1",
+      "seeds": 10000,
+      "survivalRate": 0.5976,
+      "averageYearsResolved": 7.6949,
+      "collapsedGames": 4024,
+      "collapseReasons": {
+        "environment": 4022,
+        "stability": 2
+      }
+    },
+    {
+      "strategy": "mole",
+      "strategyVersion": "mole-placeholder-v0.1.0",
+      "seeds": 10000,
+      "survivalRate": 0.2785,
+      "averageYearsResolved": 7.3493,
+      "collapsedGames": 7215,
+      "collapseReasons": {
+        "environment": 6748,
+        "stability": 649,
+        "economy": 185,
+        "happiness": 28
+      }
+    }
+  ]
+}

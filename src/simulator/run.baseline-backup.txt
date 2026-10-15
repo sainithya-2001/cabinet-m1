@@ -1,0 +1,37 @@
+import { createInitialState, defaultBudget, makeCrisis, mulberry32, resolveYear } from '../engine/index.js';
+import type { Budget, InterestRate, TradeModifier } from '../engine/index.js';
+
+const SEEDS = Number(process.env.SEEDS ?? 1000); // use SEEDS=10000 for the full spec run
+const rates: InterestRate[] = [0.03, 0.05, 0.08];
+const trade: TradeModifier[] = [-8, -4, 0, 4, 8];
+const cards = ['outbreak', 'floods', 'border-tension', 'recession', 'heatwave', 'teacher-strike', 'cyberattack', 'housing-shortage', 'energy-price-spike', 'protests', 'export-boom', 'tech-breakthrough'];
+function pick<T>(rng: () => number, items: T[]): T { return items[Math.floor(rng() * items.length)]!; }
+function budgetFor(state: ReturnType<typeof createInitialState>, rng: () => number): Budget {
+  const b = defaultBudget();
+  // Baseline agent: fund needs approximately, then modestly prioritize Environment and repay debt.
+  const sectors = ['health', 'education', 'security', 'infrastructure', 'environment', 'industry'] as const;
+  const shares = [20, 14, 14, 16, 12, 14, 10];
+  const jitter = sectors.map(() => Math.floor(rng() * 5) - 2);
+  for (let i = 0; i < sectors.length; i++) shares[i] = Math.max(0, shares[i]! + jitter[i]!);
+  shares[6] = 100 - shares.slice(0, 6).reduce((a, x) => a + x, 0);
+  if (shares[6]! < 0) { shares[5] = shares[5]! + shares[6]!; shares[6] = 0; }
+  sectors.forEach((s, i) => { b.shares[s] = shares[i]!; });
+  b.shares.debtRepayment = shares[6]!;
+  b.borrowing = pick(rng, [0, 5, 10, 15]);
+  return b;
+}
+let survived = 0, yearsTotal = 0, collapses: Record<string, number> = {};
+for (let seed = 1; seed <= SEEDS; seed++) {
+  const rng = mulberry32(seed);
+  let state = createInitialState();
+  for (let year = 1; year <= 8 && !state.collapsed; year++) {
+    const crisisId = year === 1 ? 'outbreak' : pick(rng, cards);
+    const severity = (year === 1 ? 1 : pick(rng, [1, 1, 2, 2, 3])) as 1 | 2 | 3;
+    const budget = budgetFor(state, rng);
+    const result = resolveYear(state, budget, { revenueTradeModifier: pick(rng, trade), interestRate: pick(rng, rates), crisis: makeCrisis(crisisId, severity) });
+    state = result.state; yearsTotal++;
+    if (state.collapsed) for (const reason of state.collapseReasons) collapses[reason] = (collapses[reason] ?? 0) + 1;
+  }
+  if (!state.collapsed) survived++;
+}
+console.log(JSON.stringify({ seeds: SEEDS, strategyVersion: 'baseline-random-budget-v0.1.0', survivalRate: survived / SEEDS, averageYearsResolved: yearsTotal / SEEDS, collapseReasons: collapses }, null, 2));

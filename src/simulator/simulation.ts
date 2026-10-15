@@ -1,0 +1,194 @@
+
+import {
+  createInitialState,
+  makeCrisis,
+  mulberry32,
+  resolveYear,
+  sectorNeeds,
+  PARAMETERS,
+  PARAMS_VERSION,
+} from '../engine/index.js';
+
+import type { InterestRate, TradeModifier } from '../engine/index.js';
+import { chooseBudget, STRATEGY_VERSIONS } from './strategies.js';
+import type { StrategyName } from './strategies.js';
+
+const DEFAULT_SEEDS = 1000;
+
+const STRATEGIES: StrategyName[] = [
+  'balanced',
+  'greedy-agenda',
+  'reckless',
+  'mole',
+];
+
+const rates: InterestRate[] = [0.03, 0.05, 0.08];
+const trade: TradeModifier[] = [-8, -4, 0, 4, 8];
+
+const cards = [
+  'outbreak',
+  'floods',
+  'border-tension',
+  'recession',
+  'heatwave',
+  'teacher-strike',
+  'cyberattack',
+  'housing-shortage',
+  'energy-price-spike',
+  'protests',
+  'export-boom',
+  'tech-breakthrough',
+];
+
+const targets = ['economy', 'happiness', 'stability', 'environment'] as const;
+
+function pick<T>(rng: () => number, items: readonly T[]): T {
+  return items[Math.floor(rng() * items.length)]!;
+}
+
+interface YearConditions {
+  crisisId: string;
+  severity: 1 | 2 | 3;
+  revenueTradeModifier: TradeModifier;
+  interestRate: InterestRate;
+}
+
+export function createConditions(seed: number): YearConditions[] {
+  const rng = mulberry32(seed);
+
+  // Year 1 always uses the fixed tutorial outbreak.
+  // The remaining cards are shuffled deterministically.
+  const remainingCards = cards.filter(
+    (card) => card !== 'outbreak'
+  );
+
+  for (let i = remainingCards.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [remainingCards[i], remainingCards[j]] = [
+      remainingCards[j]!,
+      remainingCards[i]!,
+    ];
+  }
+
+  const conditions: YearConditions[] = [];
+
+  for (let year = 1; year <= 8; year++) {
+    conditions.push({
+      crisisId:
+        year === 1 ? 'outbreak' : remainingCards[year - 2]!,
+      severity: (
+        year === 1 ? 1 : pick(rng, [1, 1, 2, 2, 3])
+      ) as 1 | 2 | 3,
+      revenueTradeModifier: pick(rng, trade),
+      interestRate: pick(rng, rates),
+    });
+  }
+
+  return conditions;
+}
+export interface SimulationOptions {
+  seeds?: number;
+}
+
+export interface StrategyResult {
+  strategy: StrategyName;
+  strategyVersion: string;
+  seeds: number;
+  survivalRate: number;
+  averageYearsResolved: number;
+  collapsedGames: number;
+  collapseReasons: Record<string, number>;
+}
+
+export function runSimulation(options: SimulationOptions = {}) {
+  const seeds = Math.max(
+    1,
+    Math.floor(options.seeds ?? DEFAULT_SEEDS)
+  );
+
+  const conditionsBySeed = new Map<number, YearConditions[]>();
+
+  for (let seed = 1; seed <= seeds; seed++) {
+    conditionsBySeed.set(seed, createConditions(seed));
+  }
+
+  function runStrategy(strategy: StrategyName): StrategyResult {
+    let survived = 0;
+    let yearsTotal = 0;
+    const collapses: Record<string, number> = {};
+
+    for (let seed = 1; seed <= seeds; seed++) {
+      const conditions = conditionsBySeed.get(seed)!;
+      const strategyRng = mulberry32(seed + 1_000_000);
+      let state = createInitialState();
+
+      for (let year = 1; year <= 8 && !state.collapsed; year++) {
+        
+const condition = conditions[year - 1]!;
+const crisis = makeCrisis(condition.crisisId, condition.severity);
+
+const planningInputs = {
+  revenueTradeModifier: condition.revenueTradeModifier,
+  interestRate: condition.interestRate,
+  crisis,
+};
+
+const budget =
+  strategy === 'reckless'
+    ? chooseBudget(
+        strategy,
+        state,
+        pick(strategyRng, targets),
+        {
+          availableFunds: Math.max(
+            0,
+            Math.round(
+              PARAMETERS.revenue.base +
+                PARAMETERS.revenue.economyFactor * (state.economy - 50) +
+                condition.revenueTradeModifier +
+                (crisis.revenueChange ?? 0),
+            ) +
+              30 -
+              Math.round(state.debt * condition.interestRate),
+          ),
+          needs: sectorNeeds(planningInputs),
+        },
+      )
+    : chooseBudget(strategy, state, pick(strategyRng, targets));
+
+
+        
+const result = resolveYear(state, budget, planningInputs);
+
+
+        state = result.state;
+        yearsTotal++;
+
+        if (state.collapsed) {
+          for (const reason of state.collapseReasons) {
+            collapses[reason] = (collapses[reason] ?? 0) + 1;
+          }
+        }
+      }
+
+      if (!state.collapsed) survived++;
+    }
+
+    return {
+      strategy,
+      strategyVersion: STRATEGY_VERSIONS[strategy],
+      seeds,
+      survivalRate: survived / seeds,
+      averageYearsResolved: yearsTotal / seeds,
+      collapsedGames: seeds - survived,
+      collapseReasons: collapses,
+    };
+  }
+
+  return {
+    comparisonVersion: 'strategy-comparison-v0.2.0',
+    paramsVersion: PARAMS_VERSION,
+    note: 'Shared environmental conditions per seed. Mole sabotage is not implemented.',
+    results: STRATEGIES.map(runStrategy),
+  };
+}
