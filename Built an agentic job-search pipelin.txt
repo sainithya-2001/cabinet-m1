@@ -1,3 +1,0 @@
-Built an agentic job-search pipeline that searches ~8,000 postings daily across 119 company job boards, applies rule-based filters, and ranks matches with two-tier LLM scoring (Claude Haiku → Sonnet) and schema-enforced outputs.
-Designed guardrailed resume tailoring with citation-based verification that rejects unsupported claims, plus human-in-the-loop application review with no auto-submit.
-Evaluated scoring against 30 human-labeled jobs (0.68 rank correlation; zero false positives at the original cutoff) and recalibrated the threshold, raising recall from 44% to 75%; 380+ tests with CI.
