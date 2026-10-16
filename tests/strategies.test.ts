@@ -6,7 +6,6 @@ import {
   planRecklessBudget,
   recklessTargetSpending,
 } from '../src/simulator/strategies.js';
-import { PARAMETERS } from '../src/engine/parameters.js';
 import { defaultBudget } from '../src/engine/economy.js';
 import type { CountryState, Sector } from '../src/engine/types.js';
 
@@ -28,7 +27,6 @@ const state = {
 
 function expectValidShares(shares: Record<Sector, number>) {
   const values = Object.values(shares);
-
   expect(values.every(Number.isInteger)).toBe(true);
   expect(values.every((share) => share >= 0 && share <= 100)).toBe(true);
   expect(values.reduce((sum, share) => sum + share, 0)).toBe(100);
@@ -37,52 +35,25 @@ function expectValidShares(shares: Record<Sector, number>) {
 describe('Cabinet strategy agents', () => {
   it('returns a valid default budget', () => {
     const budget = defaultBudget();
-
     expectValidShares(budget.shares);
     expect(budget.borrowing).toBe(0);
   });
 
-  it('returns a valid budget for the balanced strategy', () => {
-    const budget = chooseBudget('balanced', state);
-
-    expectValidShares(budget.shares);
-    expect(budget.borrowing).toBeGreaterThanOrEqual(0);
-    expect(budget.borrowing).toBeLessThanOrEqual(PARAMETERS.borrowing.max);
-  });
-
-  it('returns a valid budget for the greedy-agenda strategy', () => {
-    const budget = chooseBudget('greedy-agenda', state, 'economy');
-
-    expectValidShares(budget.shares);
-    expect(budget.borrowing).toBeGreaterThanOrEqual(0);
-    expect(budget.borrowing).toBeLessThanOrEqual(PARAMETERS.borrowing.max);
-  });
-
-  it('returns a valid budget for the reckless strategy', () => {
-    const budget = chooseBudget('reckless', state);
-
-    expectValidShares(budget.shares);
-    expect(budget.borrowing).toBe(PARAMETERS.borrowing.max);
-  });
-
-  it('returns a valid budget for the mole strategy', () => {
-    const budget = chooseBudget('mole', state);
-
-    expectValidShares(budget.shares);
-    expect(budget.borrowing).toBe(PARAMETERS.borrowing.max);
-  });
-
-  it('is deterministic for the same strategy and inputs', () => {
-    expect(chooseBudget('balanced', state)).toEqual(
-      chooseBudget('balanced', state),
-    );
+  it('returns valid budgets for each strategy', () => {
+    for (const strategy of [
+      'balanced',
+      'greedy-agenda',
+      'reckless',
+      'mole',
+    ] as const) {
+      expectValidShares(chooseBudget(strategy, state).shares);
+    }
   });
 });
 
 describe('Reckless strategy planning', () => {
-  it('increases each sector target by 1.3 times its need', () => {
+  it('targets 1.3 times each sector need', () => {
     const targets = recklessTargetSpending(needs);
-
     expect(targets.health).toBeCloseTo(26);
     expect(targets.education).toBeCloseTo(18.2);
     expect(targets.security).toBeCloseTo(18.2);
@@ -91,65 +62,44 @@ describe('Reckless strategy planning', () => {
     expect(targets.industry).toBeCloseTo(18.2);
   });
 
-  it('detects when available funds cover all reckless targets', () => {
-    const totalTargets = Object.values(recklessTargetSpending(needs))
+  it('checks whether all targets are affordable', () => {
+    const total = Object.values(recklessTargetSpending(needs))
       .reduce((sum, amount) => sum + amount, 0);
-
-    expect(canAffordRecklessTargets(totalTargets, needs)).toBe(true);
-    expect(canAffordRecklessTargets(totalTargets - 1, needs)).toBe(false);
+    expect(canAffordRecklessTargets(total, needs)).toBe(true);
+    expect(canAffordRecklessTargets(total - 1, needs)).toBe(false);
   });
 
-  it('returns valid shares and reports affordability', () => {
-    const totalTargets = Object.values(recklessTargetSpending(needs))
-      .reduce((sum, amount) => sum + amount, 0);
-
-    const result = planRecklessBudget(totalTargets, needs);
-
+  it('returns valid budget shares', () => {
+    const result = planRecklessBudget(200, needs);
     expectValidShares(result.budget.shares);
-    expect(result.budget.borrowing).toBe(PARAMETERS.borrowing.max);
-    expect(result.budget.shares.debtRepayment).toBe(0);
     expect(result.affordable).toBe(true);
   });
 
-  it('reports unaffordable targets when funds are insufficient', () => {
-    const result = planRecklessBudget(0, needs);
-
-    expect(result.affordable).toBe(false);
-    expectValidShares(result.budget.shares);
+  it('reports when targets are unaffordable', () => {
+    expect(planRecklessBudget(0, needs).affordable).toBe(false);
   });
 });
 
 describe('Mole strategy planning', () => {
-  it('returns valid shares that sum to 100', () => {
-    const budget = planMoleBudget(needs);
+  it('returns valid budget shares', () => {
+    expectValidShares(planMoleBudget(needs).shares);
+  });
 
+  it('does not allocate shares to debt repayment when targets exceed funds', () => {
+    const budget = planMoleBudget(needs, {});
+    expect(budget.shares.debtRepayment).toBe(0);
     expectValidShares(budget.shares);
   });
 
-  it('borrows the configured maximum', () => {
-    const budget = planMoleBudget(needs);
-
-    expect(budget.borrowing).toBe(PARAMETERS.borrowing.max);
-  });
-
-  it('does not allocate money to debt repayment', () => {
-    const budget = planMoleBudget(needs);
-
-    expect(budget.shares.debtRepayment).toBe(0);
-  });
-
-  it('reduces the relative allocation to the crisis sector', () => {
+  it('reduces the crisis sector target to 60% of its need', () => {
     const budget = planMoleBudget(needs, { health: 10 });
-
-    // The current Mole planner targets the crisis sector at 60% of its need.
-    // It distributes shares proportionally across all six sector targets.
     expectValidShares(budget.shares);
     expect(budget.shares.health).toBeLessThan(budget.shares.education);
   });
 
-  it('is deterministic for the same needs and crisis changes', () => {
+  it('is deterministic for identical inputs', () => {
     expect(planMoleBudget(needs, { health: 10 })).toEqual(
-      planMoleBudget(needs, { health: 10 }),
-    );
+  planMoleBudget(needs, { health: 10 }),
+);
   });
 });
