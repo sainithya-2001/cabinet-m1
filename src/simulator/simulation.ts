@@ -133,30 +133,30 @@ const planningInputs = {
   crisis,
 };
 
+const needs = sectorNeeds(planningInputs);
+
+const availableFunds = Math.max(
+  0,
+  Math.round(
+    PARAMETERS.revenue.base +
+      PARAMETERS.revenue.economyFactor * (state.economy - 50) +
+      condition.revenueTradeModifier +
+      (crisis.revenueChange ?? 0),
+  ) +
+    30 -
+    Math.round(state.debt * condition.interestRate),
+);
+
 const budget =
-  strategy === 'reckless'
-    ? chooseBudget(
-        strategy,
-        state,
-        pick(strategyRng, targets),
-        {
-          availableFunds: Math.max(
-            0,
-            Math.round(
-              PARAMETERS.revenue.base +
-                PARAMETERS.revenue.economyFactor * (state.economy - 50) +
-                condition.revenueTradeModifier +
-                (crisis.revenueChange ?? 0),
-            ) +
-              30 -
-              Math.round(state.debt * condition.interestRate),
-          ),
-          needs: sectorNeeds(planningInputs),
-        },
-      )
+  strategy === 'reckless' || strategy === 'mole'
+    ? chooseBudget(strategy, state, pick(strategyRng, targets), {
+        availableFunds,
+        needs,
+        ...(strategy === 'mole'
+          ? { crisisNeedChanges: crisis.needChanges }
+          : {}),
+      })
     : chooseBudget(strategy, state, pick(strategyRng, targets));
-
-
         
 const result = resolveYear(state, budget, planningInputs);
 
@@ -188,7 +188,7 @@ const result = resolveYear(state, budget, planningInputs);
   return {
     comparisonVersion: 'strategy-comparison-v0.2.0',
     paramsVersion: PARAMS_VERSION,
-    note: 'Shared environmental conditions per seed. Mole sabotage is not implemented.',
+    note: 'Shared environmental conditions per seed. Mole targets the largest crisis-driven sector need increase.',
     results: STRATEGIES.map(runStrategy),
   };
 }

@@ -5,6 +5,7 @@ import { createInitialState, validateBudget } from '../src/engine/index.js';
 import {
   canAffordRecklessTargets,
   chooseBudget,
+  planMoleBudget,
   planRecklessBudget,
   recklessTargetSpending,
 } from '../src/simulator/strategies.js';
@@ -140,3 +141,50 @@ it('uses the planning context for the Reckless budget', () => {
   );
 });
 
+describe('Mole strategy planning', () => {
+  const needs = {
+    health: 20,
+    education: 14,
+    security: 14,
+    infrastructure: 16,
+    environment: 10,
+    industry: 14,
+  };
+
+  it('underfunds the sector with the largest crisis-driven need increase', () => {
+    const budget = planMoleBudget(needs, {
+      health: 8,
+      infrastructure: 4,
+    });
+
+    // Health receives less funding relative to its need than other sectors.
+    expect(budget.shares.health / needs.health).toBeLessThan(
+      budget.shares.education / needs.education,
+    );
+    expect(budget.shares.debtRepayment).toBe(0);
+    expect(budget.borrowing).toBe(30);
+  });
+
+  it('falls back to industry when no sector need increases', () => {
+    const budget = planMoleBudget(needs, {});
+
+    expect(budget.shares.industry / needs.industry).toBeLessThan(
+      budget.shares.health / needs.health,
+    );
+  });
+
+  it('produces integer shares totaling 100 and a valid budget', () => {
+    const budget = planMoleBudget(needs, { security: 5 });
+
+    expect(
+      Object.values(budget.shares).reduce((sum, share) => sum + share, 0),
+    ).toBe(100);
+
+    for (const share of Object.values(budget.shares)) {
+      expect(Number.isInteger(share)).toBe(true);
+      expect(share).toBeGreaterThanOrEqual(0);
+    }
+
+    expect(validateBudget(budget)).toEqual([]);
+  });
+});

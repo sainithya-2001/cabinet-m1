@@ -1,6 +1,6 @@
 
 import { defaultBudget } from '../engine/index.js';
-import type { Budget, CountryState } from '../engine/index.js';
+import type { Budget, CountryState, Sector } from '../engine/index.js';
 const RECKLESS_FUNDING_MULTIPLIER = 1.3;
 
 export function recklessTargetSpending(
@@ -105,7 +105,7 @@ export const STRATEGY_VERSIONS: Record<StrategyName, string> = {
   balanced: 'balanced-v0.1.1',
   'greedy-agenda': 'greedy-agenda-v0.1.0',
   reckless: 'reckless-v0.1.2',
-  mole: 'mole-placeholder-v0.1.0',
+  mole: 'mole-v0.2.0',
 };
 
 type Target = 'economy' | 'happiness' | 'stability' | 'environment';
@@ -140,6 +140,49 @@ function weakestIndicator(state: CountryState): Target {
  * Initial heuristic agents. These are not final tuned AI policies.
  */
 
+
+export function planMoleBudget(
+  needs: Record<'health' | 'education' | 'security' | 'infrastructure' | 'environment' | 'industry', number>,
+  crisisNeedChanges: Partial<Record<'health' | 'education' | 'security' | 'infrastructure' | 'environment' | 'industry', number>> = {},
+): Budget {
+  const sectors = ['health', 'education', 'security', 'infrastructure', 'environment', 'industry'] as const;
+  const targetSector =
+  sectors.reduce<string | undefined>((best, sector) => {
+    const increase = crisisNeedChanges[sector] ?? 0;
+    if (increase <= 0) return best;
+
+    if (
+      best === undefined ||
+      increase > (crisisNeedChanges[best as typeof sectors[number]] ?? 0)
+    ) {
+      return sector;
+    }
+
+    return best;
+  }, undefined) ?? 'industry';
+  const targets = Object.fromEntries(sectors.map(sector => [
+    sector, needs[sector] * (sector === targetSector ? 0.6 : 1),
+  ])) as Record<(typeof sectors)[number], number>;
+  const total = Object.values(targets).reduce((sum, value) => sum + value, 0);
+  const budget = defaultBudget();
+  const allocations = sectors.map(sector => {
+    const exact = total > 0 ? targets[sector] / total * 100 : 0;
+    budget.shares[sector] = Math.floor(exact);
+    return { sector, remainder: exact - Math.floor(exact) };
+  });
+  let remaining = 100 - sectors.reduce((sum, sector) => sum + budget.shares[sector], 0);
+  allocations.sort((a, b) =>
+    b.remainder - a.remainder || sectors.indexOf(a.sector) - sectors.indexOf(b.sector),
+  );
+  for (const allocation of allocations) {
+    if (remaining <= 0) break;
+    budget.shares[allocation.sector]++;
+    remaining--;
+  }
+  budget.shares.debtRepayment = 0;
+  budget.borrowing = 30;
+  return budget;
+}
 export function chooseBudget(
   strategy: StrategyName,
   state: CountryState,
@@ -150,6 +193,7 @@ export function chooseBudget(
       'health' | 'education' | 'security' | 'infrastructure' | 'environment' | 'industry',
       number
     >;
+    crisisNeedChanges?: Partial<Record<Exclude<Sector, 'debtRepayment'>, number>>;
   },
 ): Budget {
 
@@ -200,13 +244,18 @@ if (strategy === 'reckless') {
 }
 
 
-  // Placeholder only: this is not actual Mole sabotage.
-  if (state.debt > 60) {
-    budget.shares.debtRepayment += 5;
-    budget.shares.industry -= 5;
-  } else {
-    budget.shares.industry += 5;
-    budget.shares.debtRepayment -= 5;
+   if (strategy === 'mole') {
+    if (planningContext) {
+      return planMoleBudget(
+        planningContext.needs,
+        planningContext.crisisNeedChanges,
+      );
+    }
+
+    budget.borrowing = 30;
+    budget.shares.industry += budget.shares.debtRepayment;
+    budget.shares.debtRepayment = 0;
+    return budget;
   }
 
   return budget;
