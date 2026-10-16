@@ -102,7 +102,7 @@ export type StrategyName =
   | 'mole';
 
 export const STRATEGY_VERSIONS: Record<StrategyName, string> = {
-  balanced: 'balanced-v0.1.1',
+  balanced: 'balanced-v0.2.0',
   'greedy-agenda': 'greedy-agenda-v0.1.0',
   reckless: 'reckless-v0.1.2',
   mole: 'mole-v0.2.0',
@@ -183,23 +183,132 @@ export function planMoleBudget(
   budget.borrowing = 30;
   return budget;
 }
+type FundableSector = Exclude<Sector, 'debtRepayment'>;
+
+type BalancedNeeds = Record<FundableSector, number>;
+
+export function planBalancedBudget(
+  fundsBeforeBorrowing: number,
+  needs: BalancedNeeds,
+): Budget {
+  const budget = defaultBudget();
+  const sectors: FundableSector[] = [
+    'health',
+    'education',
+    'security',
+    'infrastructure',
+    'environment',
+    'industry',
+  ];
+
+  const totalNeeds = sectors.reduce(
+    (sum, sector) => sum + Math.max(0, needs[sector]),
+    0,
+  );
+
+  const borrowing = Math.min(
+    20,
+    Math.ceil(Math.max(0, totalNeeds - fundsBeforeBorrowing) / 5) * 5,
+  );
+
+  budget.borrowing = borrowing;
+
+  const funds = Math.max(0, fundsBeforeBorrowing + borrowing);
+  const targets: Record<Sector, number> = {
+    health: Math.max(0, needs.health),
+    education: Math.max(0, needs.education),
+    security: Math.max(0, needs.security),
+    infrastructure: Math.max(0, needs.infrastructure),
+    environment: Math.max(0, needs.environment),
+    industry: Math.max(0, needs.industry),
+    debtRepayment: 0,
+  };
+
+  if (funds > totalNeeds) {
+    const environmentBonus = Math.min(
+      funds - totalNeeds,
+      Math.max(0, needs.environment) * 0.3,
+    );
+
+    targets.environment += environmentBonus;
+    targets.debtRepayment = funds - totalNeeds - environmentBonus;
+  }
+
+  const totalTargets = Object.values(targets).reduce(
+    (sum, amount) => sum + amount,
+    0,
+  );
+
+  if (totalTargets <= 0) {
+    budget.shares = {
+      health: 0,
+      education: 0,
+      security: 0,
+      infrastructure: 0,
+      environment: 0,
+      industry: 0,
+      debtRepayment: 100,
+    };
+    return budget;
+  }
+
+   const allocations = sectors.map((sector) => ({
+    sector,
+    exact: (targets[sector] / totalTargets) * 100,
+  }));
+
+  const exactDebtShare = (targets.debtRepayment / totalTargets) * 100;
+
+  for (const allocation of allocations) {
+    budget.shares[allocation.sector] = Math.floor(allocation.exact);
+  }
+  budget.shares.debtRepayment = Math.floor(exactDebtShare);
+
+  let remaining = 100 - Object.values(budget.shares).reduce(
+    (sum, share) => sum + share,
+    0,
+  );
+
+  const remainders = [
+    ...allocations,
+    { sector: 'debtRepayment' as const, exact: exactDebtShare },
+  ].sort(
+    (a, b) =>
+      (b.exact - Math.floor(b.exact)) -
+      (a.exact - Math.floor(a.exact)),
+  );
+
+  for (const allocation of remainders) {
+    if (remaining <= 0) break;
+    budget.shares[allocation.sector] += 1;
+    remaining--;
+  }
+
+  return budget;
+}
 export function chooseBudget(
   strategy: StrategyName,
   state: CountryState,
   target: Target = 'economy',
   planningContext?: {
-    availableFunds: number;
-    needs: Record<
-      'health' | 'education' | 'security' | 'infrastructure' | 'environment' | 'industry',
-      number
-    >;
-    crisisNeedChanges?: Partial<Record<Exclude<Sector, 'debtRepayment'>, number>>;
-  },
+  availableFunds: number;
+  fundsBeforeBorrowing?: number;
+  needs: BalancedNeeds;
+  crisisNeedChanges?: Partial<Record<Exclude<Sector, 'debtRepayment'>, number>>;
+},
 ): Budget {
 
   const budget = defaultBudget();
 
-  if (strategy === 'balanced') {
+
+     if (strategy === 'balanced') {
+    if (planningContext) {
+      return planBalancedBudget(
+        planningContext.fundsBeforeBorrowing ?? planningContext.availableFunds,
+        planningContext.needs,
+      );
+    }
+
     const priority = weakestIndicator(state);
     const sectorByTarget = {
       economy: 'industry',
@@ -227,24 +336,21 @@ export function chooseBudget(
     budget.shares.debtRepayment -= 10;
     return budget;
   }
+  if (strategy === 'reckless') {
+    if (planningContext) {
+      return planRecklessBudget(
+        planningContext.availableFunds,
+        planningContext.needs,
+      ).budget;
+    }
 
-  
-if (strategy === 'reckless') {
-  if (planningContext) {
-    return planRecklessBudget(
-      planningContext.availableFunds,
-      planningContext.needs,
-    ).budget;
+    budget.borrowing = 30;
+    budget.shares.industry += budget.shares.debtRepayment;
+    budget.shares.debtRepayment = 0;
+    return budget;
   }
 
-  budget.borrowing = 30;
-  budget.shares.industry += budget.shares.debtRepayment;
-  budget.shares.debtRepayment = 0;
-  return budget;
-}
-
-
-   if (strategy === 'mole') {
+  if (strategy === 'mole') {
     if (planningContext) {
       return planMoleBudget(
         planningContext.needs,

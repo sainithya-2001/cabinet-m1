@@ -1,7 +1,9 @@
+import { createInitialState } from '../src/engine/economy.js';
 import { describe, expect, it } from 'vitest';
 import {
   canAffordRecklessTargets,
   chooseBudget,
+  planBalancedBudget,
   planMoleBudget,
   planRecklessBudget,
   recklessTargetSpending,
@@ -101,5 +103,63 @@ describe('Mole strategy planning', () => {
     expect(planMoleBudget(needs, { health: 10 })).toEqual(
   planMoleBudget(needs, { health: 10 }),
 );
+  });
+});
+
+  describe('Balanced strategy planning', () => {
+  it('borrows in steps of 5, capped at 20, to cover a shortfall', () => {
+    const budget = planBalancedBudget(70, needs);
+    expect(budget.borrowing).toBe(20);
+    expectValidShares(budget.shares);
+  });
+it('uses public funds estimate rather than hidden available funds', () => {
+  const first = chooseBudget('balanced', createInitialState(), 'economy', {
+    availableFunds: 80,
+    fundsBeforeBorrowing: 70,
+    needs,
+  });
+
+  const second = chooseBudget('balanced', createInitialState(), 'economy', {
+    availableFunds: 100,
+    fundsBeforeBorrowing: 70,
+    needs,
+  });
+
+  expect(first).toEqual(second);
+});
+
+  it('does not borrow when funds cover all sector needs', () => {
+    const budget = planBalancedBudget(100, needs);
+    expect(budget.borrowing).toBe(0);
+    expectValidShares(budget.shares);
+  });
+
+  it('allocates surplus to Environment and then debt repayment', () => {
+    const budget = planBalancedBudget(110, needs);
+
+    expect(budget.borrowing).toBe(0);
+    expect(budget.shares).toEqual({
+      health: 18,
+      education: 13,
+      security: 13,
+      infrastructure: 14,
+      environment: 12,
+      industry: 13,
+      debtRepayment: 17,
+    });
+    expectValidShares(budget.shares);
+  });
+
+  it('returns valid shares when there are no funds or needs', () => {
+    const zeroNeeds = {
+      health: 0,
+      education: 0,
+      security: 0,
+      infrastructure: 0,
+      environment: 0,
+      industry: 0,
+    };
+    const budget = planBalancedBudget(0, zeroNeeds);
+    expectValidShares(budget.shares);
   });
 });

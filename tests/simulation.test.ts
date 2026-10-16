@@ -1,6 +1,34 @@
+import { createPublicRevenueRange } from '../src/simulator/simulation.js';
 import { describe, expect, it } from 'vitest';
 import { createConditions, runSimulation } from '../src/simulator/simulation.js';
 
+describe('public revenue range', () => {
+  it('contains actual revenue and has a width of 20', () => {
+    for (let actualRevenue = 60; actualRevenue <= 140; actualRevenue++) {
+      for (let offset = 0; offset <= 20; offset++) {
+        const range = createPublicRevenueRange(actualRevenue, offset);
+
+        expect(range.low).toBeLessThanOrEqual(actualRevenue);
+        expect(range.high).toBeGreaterThanOrEqual(actualRevenue);
+        expect(range.high - range.low).toBe(20);
+        expect(range.midpoint).toBe(range.low + 10);
+      }
+    }
+  });
+
+  it('provides the public midpoint, not the hidden actual revenue', () => {
+    const firstRange = createPublicRevenueRange(100, 10);
+    const secondRange = createPublicRevenueRange(105, 15);
+
+    // Both scenarios expose the same public range and midpoint.
+    expect(firstRange).toEqual({
+      low: 90,
+      high: 110,
+      midpoint: 100,
+    });
+    expect(secondRange).toEqual(firstRange);
+  });
+});
 describe('Cabinet simulator', () => {
   it('produces identical results for repeated runs with the same seed count', () => {
     const first = runSimulation({ seeds: 10 });
