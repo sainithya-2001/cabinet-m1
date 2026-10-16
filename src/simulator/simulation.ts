@@ -76,6 +76,7 @@ interface YearConditions {
 }
 export function createConditions(seed: number): YearConditions[] {
   const rng = mulberry32(seed);
+  const rangeRng = mulberry32(seed ^ 0x5f3759df);
 
   // Year 1 always uses the fixed tutorial outbreak.
   // The remaining cards are shuffled deterministically.
@@ -99,7 +100,7 @@ export function createConditions(seed: number): YearConditions[] {
       ) as 1 | 2 | 3,
       revenueTradeModifier: pick(rng, trade),
       interestRate: pick(rng, rates),
-      revenueRangeOffset: Math.floor(rng() * 21),
+      revenueRangeOffset: Math.floor(rangeRng() * 21),
     });
   }
 
