@@ -18,7 +18,7 @@ export const PARAMETERS = {
     environment: { environment: 12, happiness: 3 },
     industry: { economy: 10 }
   },
-  industryPollutionPerNeed: 2.5,
+  industryPollutionPerNeed: 3,
   environmentDrift: -1,
   /** Shutdown applies 80% of the last passed budget; provisional representation is shares unchanged. */
   shutdown: { stabilityPenalty: -5, budgetScale: 0.8 },
