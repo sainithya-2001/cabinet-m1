@@ -95,12 +95,24 @@ export function resolveYear(previous: CountryState, budget: Budget, inputs: Year
   if (previous.collapsed) throw new Error('Cannot resolve a year after collapse.');
 
   const year = previous.year + 1;
-  const { borrowing, revenue, interest, availableFunds } =
-  calculateYearFinances(previous, budget, inputs);
+    const { borrowing, revenue, interest, availableFunds } =
+    calculateYearFinances(previous, budget, inputs);
 
-if (borrowing > (inputs.emergencyBorrowing ? 50 : PARAMETERS.borrowing.max)) {
-  throw new Error("Borrowing exceeds this year's cap.");
-}
+  const emergencyBorrowing = inputs.emergencyBorrowing ?? 0;
+
+  if (
+    !Number.isInteger(emergencyBorrowing) ||
+    emergencyBorrowing < 0 ||
+    emergencyBorrowing % PARAMETERS.borrowing.step !== 0 ||
+    emergencyBorrowing > 20 ||
+    borrowing >
+      (emergencyBorrowing > 0 ? 50 : PARAMETERS.borrowing.max)
+  ) {
+    throw new Error(
+      'Invalid budget: emergency borrowing exceeds the allowed cap.',
+    );
+  }
+
   const needs = sectorNeeds(inputs);
   const spending = {} as Record<Sector, number>;
     const budgetScale = inputs.shutdown ? PARAMETERS.shutdown.budgetScale : 1;

@@ -73,6 +73,8 @@ describe('Cabinet economy engine M1', () => {
     ).toThrow(/Invalid budget/);
   });
 
+
+
   it('accepts valid budget shares across many allocations', () => {
     const sectors = [
       'health',
@@ -216,6 +218,7 @@ it('reconciles every explanation line exactly to the resulting indicator', () =>
     expect(withEmergencyBorrowing.state.debt).toBeGreaterThan(normal.state.debt);
   });
 
+
   it('enforces the regular and combined emergency borrowing caps', () => {
     const state = createInitialState();
     const budget = defaultBudget();
@@ -247,11 +250,6 @@ it('reconciles every explanation line exactly to the resulting indicator', () =>
       ),
     ).toThrow(/Invalid budget|exceeds this year's cap/);
   });
-
-
-
-
-
   it('is deterministic for the same state, budget, and inputs', () => {
     const a = resolveYear(
       createInitialState(),
@@ -273,6 +271,43 @@ it('reconciles every explanation line exactly to the resulting indicator', () =>
     expect(Array.from({ length: 20 }, rngA)).toEqual(
       Array.from({ length: 20 }, rngB)
     );
+  });
+
+  it('enumerates the correct number of projection combinations when hidden values are known', () => {
+    const state = createInitialState();
+    const budget = defaultBudget();
+    const projectionInputs = {
+      revenueMin: 90,
+      revenueMax: 110,
+      baseInputs: {
+        revenueTradeModifier: 0 as const,
+        interestRate: 0.05 as const,
+      },
+      crisisForSeverity: (severity: 1 | 2 | 3) =>
+        makeCrisis('outbreak', severity),
+    };
+
+    const allHidden = projectYear(state, budget, projectionInputs);
+    expect(allHidden.combinations).toBe(21 * 3 * 3);
+
+    const knownSeverity = projectYear(state, budget, {
+      ...projectionInputs,
+      severityKnown: 2,
+    });
+    expect(knownSeverity.combinations).toBe(21 * 1 * 3);
+
+    const knownInterest = projectYear(state, budget, {
+      ...projectionInputs,
+      interestKnown: 0.05,
+    });
+    expect(knownInterest.combinations).toBe(21 * 3 * 1);
+
+    const bothKnown = projectYear(state, budget, {
+      ...projectionInputs,
+      severityKnown: 2,
+      interestKnown: 0.05,
+    });
+    expect(bothKnown.combinations).toBe(21);
   });
 
 
@@ -359,6 +394,57 @@ const baseInputsForProjection = {
       }
 
       expect(projected.combinations).toBe(21 * 3 * 3);
+    }
+  });
+
+
+  it('contains actual outcomes when indicators are near their caps and floors', () => {
+    const state = {
+      ...createInitialState(),
+      year: 2,
+      economy: 99,
+      happiness: 99,
+      stability: 16,
+      environment: 11,
+      debt: 149,
+    };
+    const budget = defaultBudget();
+    const revenueMin = 90;
+    const revenueMax = 110;
+
+    const projected = projectYear(state, budget, {
+      revenueMin,
+      revenueMax,
+      baseInputs: { revenueTradeModifier: 0, interestRate: 0.05 },
+      crisisForSeverity: (severity) => makeCrisis('heatwave', severity),
+    });
+
+    for (const revenue of [90, 100, 110]) {
+      for (const severity of [1, 2, 3] as const) {
+        for (const interestRate of [0.03, 0.05, 0.08] as const) {
+          const actual = resolveYear(state, budget, {
+            revenueTradeModifier: 0,
+            interestRate,
+            crisis: makeCrisis('heatwave', severity),
+            revenueOverride: revenue,
+          });
+
+          for (const indicator of [
+            'economy',
+            'happiness',
+            'stability',
+            'environment',
+            'debt',
+          ] as const) {
+            expect(actual.state[indicator]).toBeGreaterThanOrEqual(
+              projected.min[indicator],
+            );
+            expect(actual.state[indicator]).toBeLessThanOrEqual(
+              projected.max[indicator],
+            );
+          }
+        }
+      }
     }
   });
 

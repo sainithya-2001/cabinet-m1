@@ -60,4 +60,28 @@ it('uses the fixed tutorial crisis and avoids repeating crises', () => {
   const crisisIds = first.map(year => year.crisisId);
   expect(new Set(crisisIds).size).toBe(8);
 });
+
+  it('keeps environmental conditions stable for a known seed', () => {
+    const conditions = createConditions(123);
+
+    const environmentalConditions = conditions.map(
+      ({ crisisId, severity, revenueTradeModifier, interestRate }) => [
+        crisisId,
+        severity,
+        revenueTradeModifier,
+        interestRate,
+      ],
+    );
+
+    expect(environmentalConditions).toEqual([
+      ['outbreak', 1, 4, 0.08],
+      ['energy-price-spike', 1, -8, 0.05],
+      ['floods', 1, 0, 0.05],
+      ['housing-shortage', 1, 0, 0.08],
+      ['heatwave', 1, -8, 0.03],
+      ['tech-breakthrough', 2, 8, 0.03],
+      ['cyberattack', 2, 8, 0.08],
+      ['recession', 3, -8, 0.05],
+    ]);
+  });
 });
