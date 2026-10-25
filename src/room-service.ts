@@ -1,57 +1,42 @@
 
 import { supabase } from './supabase.js';
 
-function randomToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return Array.from(bytes, (byte) =>
-    byte.toString(16).padStart(2, '0'),
-  ).join('');
-}
+type RoomResponse = {
+  roomCode: string;
+  roomId: string;
+  playerToken: string;
+};
 
-async function hashToken(token: string): Promise<string> {
-  const data = new TextEncoder().encode(token);
-  const digest = await crypto.subtle.digest('SHA-256', data);
+async function callRoomFunction(
+  body: Record<string, string>,
+): Promise<RoomResponse> {
+  const { data, error } = await supabase.functions.invoke(
+    'cabinet-rooms',
+    { body },
+  );
 
-  return Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, '0'),
-  ).join('');
-}
-
-function generateRoomCode(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const bytes = crypto.getRandomValues(new Uint8Array(6));
-
-  return Array.from(
-    bytes,
-    (byte) => alphabet[byte % alphabet.length],
-  ).join('');
-}
-
-export async function createRoom() {
-  const playerToken = randomToken();
-  const tokenHash = await hashToken(playerToken);
-
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const roomCode = generateRoomCode();
-
-    const { data, error } = await supabase.rpc('create_game_room', {
-      p_room_code: roomCode,
-      p_host_token_hash: tokenHash,
-      p_initial_state: {},
-    });
-
-    if (!error) {
-      return { roomCode, roomId: data as string, playerToken };
-    }
-
-    if (!error.message.toLowerCase().includes('duplicate key')) {
-      throw new Error(error.message);
-    }
+  if (error) {
+    throw new Error(error.message || 'Could not connect to the game server.');
   }
 
-  throw new Error('Could not generate a unique room code. Please try again.');
+  if (
+    !data ||
+    typeof data.roomCode !== 'string' ||
+    typeof data.roomId !== 'string' ||
+    typeof data.playerToken !== 'string'
+  ) {
+    throw new Error(data?.error || 'The game server returned an invalid response.');
+  }
+
+  return data as RoomResponse;
 }
 
+export async function createRoom(playerName: string) {
+  return callRoomFunction({
+    action: 'create',
+    playerName: playerName.trim(),
+  });
+}
 export async function joinRoom(roomCode: string, playerName: string) {
   const normalizedCode = roomCode.trim().toUpperCase();
   const normalizedName = playerName.trim();
@@ -64,18 +49,40 @@ export async function joinRoom(roomCode: string, playerName: string) {
     throw new Error('Your name must be between 1 and 30 characters.');
   }
 
-  const playerToken = randomToken();
-  const tokenHash = await hashToken(playerToken);
-
-  const { data, error } = await supabase.rpc('join_game_room', {
-    p_room_code: normalizedCode,
-    p_player_name: normalizedName,
-    p_player_token_hash: tokenHash,
+  return callRoomFunction({
+    action: 'join',
+    roomCode: normalizedCode,
+    playerName: normalizedName,
   });
+}
+
+export type RoomPlayer = {
+  player_name: string;
+  joined_at: string;
+};
+
+export async function getRoomPlayers(
+  roomId: string,
+  playerToken: string,
+): Promise<RoomPlayer[]> {
+  const { data, error } = await supabase.functions.invoke(
+    'cabinet-rooms',
+    {
+      body: {
+        action: 'players',
+        roomId,
+        playerToken,
+      },
+    },
+  );
 
   if (error) {
-    throw new Error(error.message);
+    throw new Error(error.message || 'Could not load players.');
   }
 
-  return { roomCode: normalizedCode, roomId: data as string, playerToken };
+  if (!data || !Array.isArray(data.players)) {
+    throw new Error(data?.error || 'Invalid player list response.');
+  }
+
+  return data.players as RoomPlayer[];
 }

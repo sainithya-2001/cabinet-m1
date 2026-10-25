@@ -1,7 +1,11 @@
 
-import { useState } from 'react';
-import { createRoom, joinRoom } from './room-service.js';
-
+import { useEffect, useState } from 'react';
+import {
+  createRoom,
+  joinRoom,
+  getRoomPlayers,
+  type RoomPlayer,
+} from './room-service.js';
 type RoomInfo = {
   roomCode: string;
   roomId: string;
@@ -14,6 +18,50 @@ export default function App() {
   const [room, setRoom] = useState<RoomInfo | null>(null);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+const [players, setPlayers] = useState<RoomPlayer[]>([]);
+
+
+  useEffect(() => {
+    if (!room) {
+      setPlayers([]);
+      return;
+    }
+
+    let active = true;
+
+    async function refreshPlayers() {
+      try {
+        const currentPlayers = await getRoomPlayers(
+          room!.roomId,
+          room!.playerToken,
+        );
+
+        if (active) {
+          setPlayers(currentPlayers);
+        }
+      } catch (error) {
+        if (active) {
+          setMessage(
+            error instanceof Error
+              ? error.message
+              : 'Could not refresh the player list.',
+          );
+        }
+      }
+    }
+
+    void refreshPlayers();
+
+    const intervalId = window.setInterval(() => {
+      void refreshPlayers();
+    }, 3000);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [room]);
+
 
   async function handleCreateRoom() {
     if (!playerName.trim()) {
@@ -25,7 +73,7 @@ export default function App() {
     setMessage('');
 
     try {
-      const created = await createRoom();
+      const created = await createRoom(playerName.trim());
       const result = { ...created };
       setRoom(result);
       setRoomCode(result.roomCode);
@@ -153,6 +201,18 @@ export default function App() {
               >
                 Copy room code
               </button>
+
+<div className="room-players">
+  <h3>Players in this room ({players.length})</h3>
+  <ul>
+    {players.map((player) => (
+      <li key={`${player.player_name}-${player.joined_at}`}>
+        {player.player_name}
+        {player.player_name === playerName.trim() ? ' (you)' : ''}
+      </li>
+    ))}
+  </ul>
+</div>
             </div>
           )}
 
