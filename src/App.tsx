@@ -1,9 +1,61 @@
 
 import { useState } from 'react';
+import { createRoom, joinRoom } from './room-service.js';
+
+type RoomInfo = {
+  roomCode: string;
+  roomId: string;
+  playerToken: string;
+};
 
 export default function App() {
   const [playerName, setPlayerName] = useState('');
   const [roomCode, setRoomCode] = useState('');
+  const [room, setRoom] = useState<RoomInfo | null>(null);
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function handleCreateRoom() {
+    if (!playerName.trim()) {
+      setMessage('Enter your player name first.');
+      return;
+    }
+
+    setLoading(true);
+    setMessage('');
+
+    try {
+      const created = await createRoom();
+      const result = { ...created };
+      setRoom(result);
+      setRoomCode(result.roomCode);
+      setMessage(`Room ${result.roomCode} created! Invite another player to join.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not create the room.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleJoinRoom() {
+    if (!playerName.trim()) {
+      setMessage('Enter your player name first.');
+      return;
+    }
+
+    setLoading(true);
+    setMessage('');
+
+    try {
+      const joined = await joinRoom(roomCode, playerName);
+      setRoom(joined);
+      setMessage(`You joined room ${joined.roomCode}!`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not join the room.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <main className="app-shell">
@@ -47,18 +99,15 @@ export default function App() {
             value={playerName}
             onChange={(event) => setPlayerName(event.target.value)}
             placeholder="What should Parliament call you?"
-            maxLength={24}
+            maxLength={30}
           />
 
           <button
             className="primary-button"
-            onClick={() =>
-              alert(
-                `Welcome${playerName.trim() ? `, ${playerName.trim()}` : ''}! Multiplayer setup is coming next.`,
-              )
-            }
+            onClick={handleCreateRoom}
+            disabled={loading}
           >
-            Create a game <span>→</span>
+            {loading ? 'Please wait…' : 'Create a game'} <span>→</span>
           </button>
 
           <div className="join-divider">
@@ -73,16 +122,39 @@ export default function App() {
               id="roomCode"
               value={roomCode}
               onChange={(event) => setRoomCode(event.target.value.toUpperCase())}
-              placeholder="e.g. CAB-482"
-              maxLength={12}
+              placeholder="e.g. A7K9PQ"
+              maxLength={6}
             />
             <button
               className="secondary-button"
-              onClick={() => alert('Room joining will be enabled when multiplayer is connected.')}
+              onClick={handleJoinRoom}
+              disabled={loading}
             >
               Join →
             </button>
           </div>
+
+          {message && (
+            <p className="helper-text" role="status">
+              {message}
+            </p>
+          )}
+
+          {room && (
+            <div className="room-details">
+              <p>Your room code</p>
+              <h2>{room.roomCode}</h2>
+              <button
+                className="secondary-button"
+                onClick={() => {
+                  void navigator.clipboard.writeText(room.roomCode);
+                  setMessage('Room code copied! Share it with another player.');
+                }}
+              >
+                Copy room code
+              </button>
+            </div>
+          )}
 
           <p className="helper-text">
             Gather your allies. Challenge your opponents. Try not to collapse
