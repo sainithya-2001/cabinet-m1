@@ -218,101 +218,93 @@ export default {
     }
     if(body.action==="start") {
       if(room.host_token_hash!==await hashToken(body.playerToken))return jsonResponse({error:"Only the host can start the game."},403);
-      if(room.status!=="waiting")return jsonResponse({error:"This game has already started."},409);
       const {data:rows,error}=await db.from("game_players").select("id,player_name,joined_at,player_token_hash").eq("room_id",room.id).order("joined_at",{ascending:true});
       if(error)return jsonResponse({error:"Could not load players."},500);
       try {
-        const next=initialLiteState((rows??[]) as PlayerRow[]);
-        const {error:updateError}=await db.from("game_rooms").update({game_state:next,status:"playing"}).eq("id",room.id).eq("status","waiting");
-        if(updateError)return jsonResponse({error:"Could not start game."},500);
-        return jsonResponse({state:publicState(next),private:{...next.privateByPlayer[player.id],playerId:player.id}});
-      } catch(e) { return jsonResponse({error:e instanceof Error?e.message:"Could not start game."},400); }
+        const initial=initialLiteState((rows??[]) as PlayerRow[]);
+        const saved=await mutateGameState(db,room.id,(latest,roomStatus)=>{
+          if(roomStatus!=="waiting" || (latest && Object.keys(latest).length>0))throw new Error("This game has already started.");
+          return {state:initial,status:"playing"};
+        });
+        return jsonResponse({state:publicState(saved.state),private:{...saved.state.privateByPlayer[player.id],playerId:player.id}});
+      }catch(e){return jsonResponse({error:e instanceof Error?e.message:"Could not start game."},409);}
     }
     if(body.action==="state") {
-      if(!state)return jsonResponse({state:null,status:room.status});
-      const now=Date.now();
-      let next=state;
-      if(state.status==="playing" && state.phaseDeadline!==null && now>=state.phaseDeadline) {
-        const phases: Record<string,string> = { headline:"clue", clue:"budget", budget:"vote", vote:"result", result:"headline", guess:"finished" };
-        const phase=phases[state.phase] ?? "headline";
-        let year=state.year;
-        let status=state.status as LiteState["status"];
-        if(state.phase==="vote" && state.pendingBudget && state.country) {
-          const choices={...state.voteChoices};
-          // Missing human votes count as abstentions. Bot votes are fixed when the vote opens.
-          const yes=Object.values(choices).filter(Boolean).length;
-          const no=Object.values(choices).filter(v=>v===false).length;
-          if(yes>no) {
-            const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
-            const resolution=resolveYear(state.country,state.pendingBudget,{revenueTradeModifier:0,interestRate:0.05,crisis});
-            next={...state,country:resolution.state,lastPassedBudget:state.pendingBudget,failedVotes:0,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:true,yes,no,resolution},pendingBudget:null,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
-          } else if(state.failedVotes===0) {
-            // A failed first vote hands the redraft to the next seat, including bot seats.
-            const currentIndex=state.players.findIndex(p=>p.id===state.primeMinisterId);
-            const pm=state.players[(currentIndex+1+state.players.length)%state.players.length];
-            if(pm?.isBot) {
-              const draft=botDraft({...state,primeMinisterId:pm.id,failedVotes:1});
-              const budget=liteDraftToBudget(draft);
-              const choices=botVoteChoices(state);
-              next={...state,failedVotes:1,primeMinisterId:pm.id,phase:"vote",phaseStartedAt:now,phaseDeadline:now+(state.year===1?15000:10000),pendingBudget:budget,budgetDraft:draft,voteChoices:choices,votes:choices,result:{passed:false,yes,no,redraftBy:pm.id,botRedraft:true},version:state.version+1};
-            } else {
-              next={...state,failedVotes:1,primeMinisterId:pm?.id ?? null,phase:"budget",phaseStartedAt:now,phaseDeadline:now+20000,pendingBudget:null,budgetDraft:null,voteChoices:{},votes:{},result:{passed:false,yes,no,redraftBy:pm?.id},version:state.version+1};
-            }
-          } else {
-            const fallback=state.lastPassedBudget ?? {shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment:12},borrowing:0};
-            const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
-            const resolution=resolveYear(state.country,fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true});
-            next={...state,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:false,shutdown:true,yes,no,resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
+      try {
+        const saved = await mutateGameState(db, room.id, (state, roomStatus) => {
+          if (!state) throw new Error("The game has not started.");
+          const now=Date.now();
+          let next=state;
+          if (!(state.status==="playing" && state.phaseDeadline!==null && now>=state.phaseDeadline)) return {state,status:roomStatus,changed:false};
+                if(state.status==="playing" && state.phaseDeadline!==null && now>=state.phaseDeadline) {
+                  const phases: Record<string,string> = { headline:"clue", clue:"budget", budget:"vote", vote:"result", result:"headline", guess:"finished" };
+                  const phase=phases[state.phase] ?? "headline";
+                  let year=state.year;
+                  let status=state.status as LiteState["status"];
+                  if(state.phase==="vote" && state.pendingBudget && state.country) {
+                    const choices={...state.voteChoices};
+                    // Missing human votes count as abstentions. Bot votes are fixed when the vote opens.
+                    const yes=Object.values(choices).filter(Boolean).length;
+                    const no=Object.values(choices).filter(v=>v===false).length;
+                    if(yes>no) {
+                      const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
+                      const resolution=resolveYear(state.country,state.pendingBudget,{revenueTradeModifier:0,interestRate:0.05,crisis});
+                      next={...state,country:resolution.state,lastPassedBudget:state.pendingBudget,failedVotes:0,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:true,yes,no,resolution},pendingBudget:null,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
+                    } else if(state.failedVotes===0) {
+                      // A failed first vote hands the redraft to the next seat, including bot seats.
+                      const currentIndex=state.players.findIndex(p=>p.id===state.primeMinisterId);
+                      const pm=state.players[(currentIndex+1+state.players.length)%state.players.length];
+                      if(pm?.isBot) {
+                        const draft=botDraft({...state,primeMinisterId:pm.id,failedVotes:1});
+                        const budget=liteDraftToBudget(draft);
+                        const choices=botVoteChoices(state);
+                        next={...state,failedVotes:1,primeMinisterId:pm.id,phase:"vote",phaseStartedAt:now,phaseDeadline:now+(state.year===1?15000:10000),pendingBudget:budget,budgetDraft:draft,voteChoices:choices,votes:choices,result:{passed:false,yes,no,redraftBy:pm.id,botRedraft:true},version:state.version+1};
+                      } else {
+                        next={...state,failedVotes:1,primeMinisterId:pm?.id ?? null,phase:"budget",phaseStartedAt:now,phaseDeadline:now+20000,pendingBudget:null,budgetDraft:null,voteChoices:{},votes:{},result:{passed:false,yes,no,redraftBy:pm?.id},version:state.version+1};
+                      }
+                    } else {
+                      const fallback=state.lastPassedBudget ?? {shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment:12},borrowing:0};
+                      const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
+                      const resolution=resolveYear(state.country,fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true});
+                      next={...state,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:false,shutdown:true,yes,no,resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
+                    }
+                  } else if(state.phase==="budget") {
+                    // A PM who misses the drafting deadline triggers the same fallback path as a failed vote.
+                    const fallback=state.lastPassedBudget ?? {shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment:12},borrowing:0};
+                    const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
+                    const resolution=resolveYear(state.country ?? createInitialState(),fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true});
+                    next={...state,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:false,shutdown:true,reason:"Budget deadline expired",resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
+                  } else if(state.phase==="clue" && state.players.find(p=>p.id===state.primeMinisterId)?.isBot) {
+                    // Bot PMs draft automatically; they must not trigger a fake missed-deadline shutdown.
+                    const draft=botDraft(state);
+                    const budget=liteDraftToBudget(draft);
+                    const choices=botVoteChoices(state);
+                    next={...state,budgetDraft:draft,pendingBudget:budget,phase:"vote",phaseStartedAt:now,phaseDeadline:now+(state.year===1?15000:10000),votes:choices,voteChoices:choices,readyByPlayer:{},version:state.version+1};
+                  } else if(state.phase==="result") {
+                    if(year>=3) { next={...state,phase:"guess",phaseStartedAt:now,phaseDeadline:now+30000,readyByPlayer:{},version:state.version+1}; }
+                    else {
+                      year++;
+                      // PM rotation follows the ordered seats: all humans get their turn before bots.
+                      const currentIndex=state.players.findIndex(p=>p.id===state.primeMinisterId);
+                      const nextPm=state.players[(currentIndex+1+state.players.length)%state.players.length];
+                      next={...state,year,primeMinisterId:nextPm?.id ?? state.players[0]?.id ?? null,phase:"headline",phaseStartedAt:now,phaseDeadline:now+4000,readyByPlayer:{},budgetDraft:null,votes:{},voteChoices:{},pendingBudget:null,failedVotes:0,version:state.version+1};
+                    }
+                  } else if(state.phase==="guess") {
+                    status="finished";
+                    const humans=state.players.filter(p=>!p.isBot);
+                    const mole=state.players.find(p=>p.isMole);
+                    const correct=humans.filter(p=>state.guesses[p.id]===mole?.id).length;
+                    const incorrect=humans.length-correct;
+                    next={...state,status,phase:"finished",phaseStartedAt:now,phaseDeadline:null,result:{outcome:incorrect>correct?"Mole wins":"Cabinet wins",moleName:mole?.name,correctGuesses:correct,incorrectGuesses:incorrect,guesses:state.guesses},version:state.version+1};
+                  } else {
+                    const duration=phase==="clue"?(year===1?60000:30000):phase==="budget"?(year===1?40000:30000):phase==="vote"?(year===1?15000:10000):phase==="result"?(year===1?15000:10000):30000;
+                    next={...state,phase,phaseStartedAt:now,phaseDeadline:now+duration,readyByPlayer:{},version:state.version+1};
+            
           }
-        } else if(state.phase==="budget") {
-          // A PM who misses the drafting deadline triggers the same fallback path as a failed vote.
-          const fallback=state.lastPassedBudget ?? {shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment:12},borrowing:0};
-          const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
-          const resolution=resolveYear(state.country ?? createInitialState(),fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true});
-          next={...state,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:false,shutdown:true,reason:"Budget deadline expired",resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
-        } else if(state.phase==="clue" && state.players.find(p=>p.id===state.primeMinisterId)?.isBot) {
-          // Bot PMs draft automatically; they must not trigger a fake missed-deadline shutdown.
-          const draft=botDraft(state);
-          const budget=liteDraftToBudget(draft);
-          const choices=botVoteChoices(state);
-          next={...state,budgetDraft:draft,pendingBudget:budget,phase:"vote",phaseStartedAt:now,phaseDeadline:now+(state.year===1?15000:10000),votes:choices,voteChoices:choices,readyByPlayer:{},version:state.version+1};
-        } else if(state.phase==="result") {
-          if(year>=3) { next={...state,phase:"guess",phaseStartedAt:now,phaseDeadline:now+30000,readyByPlayer:{},version:state.version+1}; }
-          else {
-            year++;
-            // PM rotation follows the ordered seats: all humans get their turn before bots.
-            const currentIndex=state.players.findIndex(p=>p.id===state.primeMinisterId);
-            const nextPm=state.players[(currentIndex+1+state.players.length)%state.players.length];
-            next={...state,year,primeMinisterId:nextPm?.id ?? state.players[0]?.id ?? null,phase:"headline",phaseStartedAt:now,phaseDeadline:now+4000,readyByPlayer:{},budgetDraft:null,votes:{},voteChoices:{},pendingBudget:null,failedVotes:0,version:state.version+1};
-          }
-        } else if(state.phase==="guess") {
-          status="finished";
-          const humans=state.players.filter(p=>!p.isBot);
-          const mole=state.players.find(p=>p.isMole);
-          const correct=humans.filter(p=>state.guesses[p.id]===mole?.id).length;
-          const incorrect=humans.length-correct;
-          next={...state,status,phase:"finished",phaseStartedAt:now,phaseDeadline:null,result:{outcome:incorrect>correct?"Mole wins":"Cabinet wins",moleName:mole?.name,correctGuesses:correct,incorrectGuesses:incorrect,guesses:state.guesses},version:state.version+1};
-        } else {
-          const duration=phase==="clue"?(year===1?60000:30000):phase==="budget"?(year===1?40000:30000):phase==="vote"?(year===1?15000:10000):phase==="result"?(year===1?15000:10000):30000;
-          next={...state,phase,phaseStartedAt:now,phaseDeadline:now+duration,readyByPlayer:{},version:state.version+1};
-        }
-        // Compare-and-swap the version so simultaneous client polls cannot advance the same deadline twice.
-        const {data:updated,error:updateError}=await db.from("game_rooms")
-          .update({game_state:next,status:next.status})
-          .eq("id",room.id)
-          .eq("status","playing")
-          .eq("game_state->>version",String(state.version))
-          .select("game_state,status")
-          .maybeSingle();
-        if(updateError)return jsonResponse({error:"Could not advance game phase."},500);
-        if(!updated) {
-          const {data:latest,error:latestError}=await db.from("game_rooms").select("game_state,status").eq("id",room.id).maybeSingle();
-          if(latestError||!latest)return jsonResponse({error:"Could not reload game state."},500);
-          const latestState=latest.game_state as LiteState | null;
-          return jsonResponse({state:latestState?publicState(latestState):null,status:latest.status});
-        }
-      }
-      return jsonResponse({state:publicState(next),status:next.status});
+          return {state:next,status:next.status,changed:true};
+        });
+        return jsonResponse({state:publicState(saved.state),status:saved.status});
+      } catch(e) { return jsonResponse({error:e instanceof Error?e.message:"Could not advance game phase."},409); }
     }
     if(body.action==="private") {
       if(!state)return jsonResponse({private:null});
@@ -388,7 +380,7 @@ export default {
           if(latest.guesses[player.id])throw new Error("You have already guessed.");
           const guesses={...latest.guesses,[player.id]:target.id},humans=latest.players.filter(p=>!p.isBot),allGuessed=humans.every(p=>guesses[p.id]),now=Date.now();
           let next:LiteState={...latest,guesses};
-          if(allGuessed||(latest.phaseDeadline!==null&&now>=latest.phaseDeadline)){const mole=latest.players.find(p=>p.isMole),correct=humans.filter(p=>guesses[p.id]===mole?.id).length,incorrect=humans.length-correct;next={...next,status:"finished",phase:"finished",phaseDeadline:null,result:{outcome:incorrect>correct?"Mole wins":"Cabinet wins",moleName:mole?.name,correctGuesses:correct,incorrectGuesses:incorrect,guesses};}
+          if(allGuessed||(latest.phaseDeadline!==null&&now>=latest.phaseDeadline)){const mole=latest.players.find(p=>p.isMole),correct=humans.filter(p=>guesses[p.id]===mole?.id).length,incorrect=humans.length-correct;next={...next,status:"finished",phase:"finished",phaseDeadline:null,result:{outcome:incorrect>correct?"Mole wins":"Cabinet wins",moleName:mole?.name,correctGuesses:correct,incorrectGuesses:incorrect,guesses}}; }
           return {state:next,status:next.status};
         });
         return jsonResponse({state:publicState(saved.state)});
