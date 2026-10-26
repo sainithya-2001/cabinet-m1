@@ -183,8 +183,7 @@ const [budgetDraft, setBudgetDraft] = useState({health:2,education:2,security:2,
         </h1>
 
         <p className="hero-copy">
-          Lead a government, negotiate with rivals, and keep your country
-          standing. Your choices shape the story.
+          Cabinet: Run the country. Find the liar.
         </p>
 
         <div className="game-panel">
@@ -301,20 +300,12 @@ const [budgetDraft, setBudgetDraft] = useState({health:2,education:2,security:2,
           </p>
         </div>
 
-        <div className="feature-row">
-          <div>
-            <span className="feature-icon">♙</span>
-            <span>PLAY TOGETHER</span>
-          </div>
-          <div>
-            <span className="feature-icon">⚖</span>
-            <span>MAKE HARD CHOICES</span>
-          </div>
-          <div>
-            <span className="feature-icon">◎</span>
-            <span>CHANGE THE COUNTRY</span>
-          </div>
+        <div className="feature-row spec-rules">
+          <article><span className="feature-icon">01</span><h3>Get a secret clue.</h3><p>A crisis hits. Only you know one number, and you can tell the truth or lie.</p></article>
+          <article><span className="feature-icon">02</span><h3>Argue, then vote.</h3><p>The Prime Minister splits 10 budget coins, and the cabinet votes yes or no.</p></article>
+          <article><span className="feature-icon">03</span><h3>Survive and unmask.</h3><p>Keep Veloria alive for 3 years, then name the Mole.</p></article>
         </div>
+        <p className="refresh-note">Refreshing reconnects you.</p>
       </section>
 
       <footer>
