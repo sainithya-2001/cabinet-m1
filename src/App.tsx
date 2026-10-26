@@ -7,7 +7,7 @@ import {
   getRoomPlayers,
   type RoomPlayer,
   startGame, getGameState, getPrivateGameInfo, markReady, sendRoomChat, submitLiteBudget, castBudgetVote, submitMoleGuess,
-  type PublicGameState, type PrivateGameInfo, type RoomChatMessage, subscribeRoomChat,
+  type PublicGameState, type PrivateGameInfo, type RoomChatMessage, subscribeRoomChat, publishMyClue, subscribeBudgetPreview, sendBudgetPreview,
 } from './room-service.ts';
 type RoomInfo = {
   roomCode: string;
@@ -25,6 +25,8 @@ const [players, setPlayers] = useState<RoomPlayer[]>([]);
 const [gameState, setGameState] = useState<PublicGameState | null>(null);
 const [privateInfo, setPrivateInfo] = useState<PrivateGameInfo | null>(null);
 const [chatText, setChatText] = useState('');
+const [clueDraft, setClueDraft] = useState<number | null>(null);
+const [budgetPreview, setBudgetPreview] = useState<PublicGameState['budgetDraft']>(null);
 const [chatMessages, setChatMessages] = useState<RoomChatMessage[]>([]);
 const [budgetDraft, setBudgetDraft] = useState({health:2,education:2,security:2,environment:2,economy:2,borrowing:0 as 0|10|20});
 const [showRules, setShowRules] = useState(false);
@@ -43,6 +45,7 @@ const phaseCopy: Record<string, {title:string; instruction:string}> = {
   finished: { title: 'The Veloria Times', instruction: 'Read the final verdict and see who spotted the liar.' },
 };
 const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.ceil((gameState.phaseDeadline - clockNow) / 1000));
+useEffect(() => { if (gameState?.phase !== 'budget') setBudgetPreview(gameState?.budgetDraft ?? null); }, [gameState?.phase, gameState?.year]);
 
 
   useEffect(() => {
@@ -90,9 +93,11 @@ const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.c
   useEffect(() => {
     setChatMessages([]);
     if (!room) return;
-    return subscribeRoomChat(room.roomId, message => {
-      setChatMessages(current => [...current, message].slice(-100));
+    const unsubscribeChat = subscribeRoomChat(room.roomId, message => {
+      setChatMessages(current => current.some(item => item.at === message.at && item.playerId === message.playerId) ? current : [...current, message].slice(-100));
     });
+    const unsubscribeBudget = subscribeBudgetPreview(room.roomId, draft => setBudgetPreview(draft));
+    return () => { unsubscribeChat(); unsubscribeBudget(); };
   }, [room]);
 
   useEffect(() => {
@@ -101,7 +106,7 @@ const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.c
     async function refreshGame() {
       try {
         const [g, p] = await Promise.all([getGameState(room!.roomId, room!.playerToken), getPrivateGameInfo(room!.roomId, room!.playerToken)]);
-        if (active) { setGameState(g.state); setPrivateInfo(p.private); }
+        if (active) { setGameState(g.state); setPrivateInfo(p.private); if (g.state?.budgetDraft) setBudgetPreview(g.state.budgetDraft); if (p.private && clueDraft === null) setClueDraft(p.private.trueValue); }
       } catch (error) { if (active) setMessage(error instanceof Error ? error.message : 'Could not refresh game state.'); }
     }
     void refreshGame();
@@ -128,7 +133,7 @@ const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.c
 
   async function handleStartGame() {
     if (!room) return; setLoading(true); setMessage('');
-    try { const r = await startGame(room.roomId, room.playerToken); setGameState(r.state); setPrivateInfo(r.private); }
+    try { const r = await startGame(room.roomId, room.playerToken); setGameState(r.state); setPrivateInfo(r.private); setClueDraft(r.private.trueValue); setBudgetPreview(r.state.budgetDraft); }
     catch (e) { setMessage(e instanceof Error ? e.message : 'Could not start game.'); }
     finally { setLoading(false); }
   }
@@ -136,6 +141,23 @@ const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.c
     if (!room) return;
     try { const r = await markReady(room.roomId, room.playerToken); setGameState(r.state); }
     catch (e) { setMessage(e instanceof Error ? e.message : 'Could not mark ready.'); }
+  }
+  async function handlePublishClue() {
+    if (!room || clueDraft === null) return;
+    try {
+      const r = await publishMyClue(room.roomId, room.playerToken, clueDraft);
+      setGameState(r.state);
+      setClueDraft(null);
+      if (r.message && !chatMessages.some(item => item.at === r.message.at && item.playerId === r.message.playerId)) setChatMessages(current => [...current, r.message].slice(-100));
+      setMessage('Clue published to cabinet chat.');
+    } catch (e) { setMessage(e instanceof Error ? e.message : 'Could not publish clue.'); }
+  }
+  async function handleBudgetDraftChange(next: typeof budgetDraft | ((current: typeof budgetDraft) => typeof budgetDraft)) {
+    const resolved = typeof next === 'function' ? next(budgetDraft) : next;
+    setBudgetDraft(resolved);
+    if (room && gameState?.phase === 'budget' && privateInfo?.playerId === gameState.primeMinisterId) {
+      void sendBudgetPreview(room.roomId, room.playerToken, resolved).catch(() => undefined);
+    }
   }
   async function handleSendChat() {
     if (!room) return;
@@ -186,13 +208,13 @@ const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.c
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell${gameState ? " in-game" : ""}`}>
       <nav className="topbar">
         <div className="brand">
           <span className="brand-icon">C</span>
           CABINET
         </div>
-        <div className="topbar-tools"><span className="topbar-label">THE POLITICAL STRATEGY GAME</span><button className="rules-trigger" onClick={() => setShowRules(true)} aria-label="How to play">? How to play</button></div>
+        <div className="topbar-tools">{gameState && room && <span className="room-code-chip">ROOM {room.roomCode}</span>}<span className="topbar-label">THE POLITICAL STRATEGY GAME</span><button className="rules-trigger" onClick={() => setShowRules(true)} aria-label="How to play">? How to play</button></div>
       </nav>
 
       <section className="hero">
@@ -261,7 +283,7 @@ const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.c
             </button>
           </div>
 
-          {message && (
+          {!gameState && message && (
             <p className="helper-text" role="status">
               {message}
             </p>
@@ -269,9 +291,7 @@ const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.c
 
           {room && (
             <div className="room-details">
-              <p>Your room code</p>
-              <h2>{room.roomCode}</h2>
-              <button
+              {!gameState && <><p>Your room code</p><h2>{room.roomCode}</h2><button
                 className="secondary-button"
                 onClick={() => {
                   const inviteUrl = new URL(window.location.href);
@@ -281,34 +301,34 @@ const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.c
                 }}
               >
                 Copy invite link
-              </button>
+              </button></>}
 
 {!gameState && <button className="primary-button" onClick={handleStartGame} disabled={loading}>{loading ? 'Starting…' : 'Start game'}</button>}
 {gameState && <section className="live-game" aria-live="polite">
   <div className="phase-status"><div><span className="section-kicker">YEAR {gameState.year} OF 3 · {gameState.phase.toUpperCase()}</span><h2>{phaseCopy[gameState.phase]?.title ?? 'Cabinet in session'}</h2><p>{phaseCopy[gameState.phase]?.instruction ?? 'Follow the cabinet proceedings.'}</p></div><div className="phase-clock" aria-live="polite">{secondsLeft === null ? '—' : `${secondsLeft}s`}<span>LEFT</span></div></div>
   {gameState.crisisId && <div className="crisis-headline"><span className="section-kicker">NATIONAL HEADLINE</span><h3>{({'outbreak':'Disease outbreak','floods':'Severe flooding','border-tension':'Border tensions','recession':'Economic recession','heatwave':'Extreme heatwave','teacher-strike':'Teachers on strike','cyberattack':'National cyberattack','housing-shortage':'Housing shortage','energy-price-spike':'Energy price spike','protests':'Nationwide protests','export-boom':'Export boom','tech-breakthrough':'Technology breakthrough'} as Record<string,string>)[gameState.crisisId] ?? 'Breaking national news'}</h3></div>}
-  <p>Game status: {gameState.status}</p>
   <p><strong>Prime Minister:</strong> {gameState.players.find(p=>p.id===gameState.primeMinisterId)?.name ?? '—'}{privateInfo?.playerId===gameState.primeMinisterId ? ' (you)' : ''}</p>
   {gameState.country && <div className="country-indicators"><h3>Country indicators</h3><p>Economy {Math.round(gameState.country.economy)} · Happiness {Math.round(gameState.country.happiness)} · Stability {Math.round(gameState.country.stability)} · Environment {Math.round(gameState.country.environment)} · Debt {Math.round(gameState.country.debt)}</p></div>}
-  {privateInfo && <div className="private-role"><h3>Your private role</h3><p>Ministry: <strong>{privateInfo.ministry}</strong></p><p>Secret: <strong>{privateInfo.isMole ? 'Mole' : 'Cabinet member'}</strong></p><p>{privateInfo.clue}</p></div>}
+  {privateInfo && <div className="private-role"><h3>Your private report</h3><p className="clue-report">{privateInfo.ministry === 'Finance' ? <>Treasury report: revenue is <strong>{privateInfo.trueValue}</strong>.</> : privateInfo.ministry === 'Health' ? <>Hospital report: {privateInfo.trueValue * 10} patients in corridors. Health needs <strong>{privateInfo.trueValue}</strong>.</> : privateInfo.ministry === 'Defense' ? <>Security briefing: Defense needs <strong>{privateInfo.trueValue}</strong>.</> : privateInfo.ministry === 'Education' ? <>School report: Education needs <strong>{privateInfo.trueValue}</strong>.</> : privateInfo.ministry === 'Environment' ? <>Climate report: Environment needs <strong>{privateInfo.trueValue}</strong>.</> : <>Industry report: Economy needs <strong>{privateInfo.trueValue}</strong>.</>}</p><p>Ministry: <strong>{privateInfo.ministry}</strong></p><p>Secret: <strong>{privateInfo.isMole ? 'Mole' : 'Cabinet member'}</strong></p>{gameState.phase === 'clue' && !gameState.publishedClues?.some(c => c.playerId === privateInfo.playerId && c.year === gameState.year) && <div className="publish-clue"><label htmlFor="clue-value">Publish my clue</label><input id="clue-value" type="number" min={privateInfo.ministry === 'Finance' ? 60 : 0} max={privateInfo.ministry === 'Finance' ? 140 : 60} value={clueDraft ?? privateInfo.trueValue} onChange={e=>setClueDraft(Number(e.target.value))}/><button className="secondary-button" onClick={handlePublishClue} disabled={clueDraft === null || !Number.isInteger(clueDraft)}>Publish clue</button></div>}</div>}
   {gameState.phase === 'guess' && <div className="mole-guess"><h3>Who is the Mole?</h3><p>Choose the player you suspect. Your guess is final.</p>{gameState.players.filter(p=>!p.isBot && p.id !== privateInfo?.playerId).map(p=><button key={p.id} className="secondary-button" onClick={()=>handleGuess(p.id)}>{p.name}</button>)}</div>}
   {gameState.phase === 'finished' && <div className="game-result"><h3>Game over</h3><pre>{JSON.stringify(gameState.result,null,2)}</pre></div>}
   {gameState.phase === 'budget' && <div className="lite-budget">
     <h3>Draft the ten-coin budget</h3>
     {privateInfo?.playerId !== gameState.primeMinisterId && <p>Only the current Prime Minister can submit the budget.</p>}
-    {(['health','education','security','environment','economy'] as const).map(line => <div className="coin-row" key={line}><span>{line}</span><div className="coin-controls"><button type="button" className="coin-button" aria-label={`Remove one ${line} coin`} onClick={()=>setBudgetDraft(d=>({...d,[line]:Math.max(0,d[line]-1)}))} disabled={budgetDraft[line]===0}>−</button><strong aria-live="polite">{budgetDraft[line]}</strong><button type="button" className="coin-button" aria-label={`Add one ${line} coin`} onClick={()=>setBudgetDraft(d=>{const total=d.health+d.education+d.security+d.environment+d.economy;return total>=10?d:{...d,[line]:d[line]+1}})} disabled={budgetDraft.health+budgetDraft.education+budgetDraft.security+budgetDraft.environment+budgetDraft.economy>=10}>+</button></div></div>)}
-    <p>Coins allocated: {budgetDraft.health+budgetDraft.education+budgetDraft.security+budgetDraft.environment+budgetDraft.economy} / 10</p>
-    <label>Borrowing <select value={budgetDraft.borrowing} onChange={e=>setBudgetDraft(d=>({...d,borrowing:Number(e.target.value) as 0|10|20}))}><option value={0}>0</option><option value={10}>10</option><option value={20}>20</option></select></label>
+    {(['health','education','security','environment','economy'] as const).map(line => { const pm = privateInfo?.playerId === gameState.primeMinisterId; const shown = pm ? budgetDraft : (budgetPreview ?? gameState.budgetDraft ?? budgetDraft); const total = shown.health+shown.education+shown.security+shown.environment+shown.economy; return <div className="coin-row" key={line}><span>{line}</span><div className="coin-controls">{pm ? <><button type="button" className="coin-button" aria-label={`Remove one ${line} coin`} onClick={()=>handleBudgetDraftChange({...budgetDraft,[line]:Math.max(0,budgetDraft[line]-1)})} disabled={budgetDraft[line]===0}>−</button><strong aria-live="polite">{shown[line]}</strong><button type="button" className="coin-button" aria-label={`Add one ${line} coin`} onClick={()=>handleBudgetDraftChange(d=>{const sum=d.health+d.education+d.security+d.environment+d.economy;return sum>=10?d:{...d,[line]:d[line]+1}})} disabled={total>=10}>+</button></> : <strong aria-live="polite">{shown[line]}</strong>}</div></div>})}
+    <p>Coins allocated: {(privateInfo?.playerId === gameState.primeMinisterId ? budgetDraft : (budgetPreview ?? gameState.budgetDraft ?? budgetDraft)).health+(privateInfo?.playerId === gameState.primeMinisterId ? budgetDraft : (budgetPreview ?? gameState.budgetDraft ?? budgetDraft)).education+(privateInfo?.playerId === gameState.primeMinisterId ? budgetDraft : (budgetPreview ?? gameState.budgetDraft ?? budgetDraft)).security+(privateInfo?.playerId === gameState.primeMinisterId ? budgetDraft : (budgetPreview ?? gameState.budgetDraft ?? budgetDraft)).environment+(privateInfo?.playerId === gameState.primeMinisterId ? budgetDraft : (budgetPreview ?? gameState.budgetDraft ?? budgetDraft)).economy} / 10</p>
+    {privateInfo?.playerId === gameState.primeMinisterId ? <label>Borrowing <select value={budgetDraft.borrowing} onChange={e=>handleBudgetDraftChange({...budgetDraft,borrowing:Number(e.target.value) as 0|10|20})}><option value={0}>0</option><option value={10}>10</option><option value={20}>20</option></select></label> : <p>Borrowing: {(budgetPreview ?? gameState.budgetDraft ?? budgetDraft).borrowing ?? 0}</p>}
+    <div className="predicted-effects"><h4>Predicted effects (ranges)</h4><p>Health: {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).health*2-2)} to {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).health*2+2)}</p><p>Education: {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).education-2)} to {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).education+2)}</p><p>Security: {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).security-2)} to {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).security+2)}</p><p>Environment: {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).environment-2)} to {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).environment+2)}</p><p>Economy: {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).economy-2)} to {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).economy+2)}</p></div>
     <button className="primary-button" onClick={handleSubmitBudget} disabled={privateInfo?.playerId !== gameState.primeMinisterId || budgetDraft.health+budgetDraft.education+budgetDraft.security+budgetDraft.environment+budgetDraft.economy!==10}>Submit budget</button>
   </div>}
   {gameState.phase === 'vote' && <div><h3>Vote on the budget</h3>{gameState.voteChoices?.[privateInfo?.playerId ?? ''] !== undefined ? <p>Your vote is recorded.</p> : <><button className="primary-button" onClick={()=>handleVote(true)}>Approve</button> <button className="secondary-button" onClick={()=>handleVote(false)}>Reject</button></>}<p>Votes cast: {Object.keys(gameState.votes).length}</p></div>}
   <h3>Cabinet seats</h3><ul>{gameState.players.map(p => <li key={p.id}>{p.name}{p.isBot ? ' · AI' : ''} — {p.ministry}</li>)}</ul>
   <button className="secondary-button ready-button" onClick={handleReady}>Ready — move on when everyone is ready</button>
-  <h3>Cabinet chat</h3><ul>{chatMessages.map((m, index) => <li key={m.at + m.playerId + index}><strong>{m.name}:</strong> {m.text}</li>)}</ul>
+  <h3>Cabinet chat</h3><ul>{chatMessages.map((m, index) => <li key={m.at + m.playerId + index}>{m.kind === 'clue' && <span className="chat-clue-badge">Clue</span>}<strong>{m.name}:</strong> {m.text}</li>)}</ul>
   {!['vote','result','finished'].includes(gameState.phase) && <div className="join-row"><input value={chatText} maxLength={140} onChange={e=>setChatText(e.target.value)} placeholder="Message (140 characters max)"/><button className="secondary-button" onClick={handleSendChat} disabled={!chatText.trim()}>Send</button></div>}
 </section>}
 
-<div className="room-players">
+{!gameState && <div className="room-players">
   <h3>Players in this room ({players.length})</h3>
   <ul>
     {players.map((player) => (
@@ -318,22 +338,22 @@ const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.c
       </li>
     ))}
   </ul>
-</div>
+</div>}
             </div>
           )}
 
-          <p className="helper-text">
+          {!gameState && <p className="helper-text">
             Gather your allies. Challenge your opponents. Try not to collapse
             the economy.
-          </p>
+          </p>}
         </div>
 
-        <div className="feature-row spec-rules">
+        {!gameState && <div className="feature-row spec-rules">
           <article><span className="feature-icon">01</span><h3>Get a secret clue.</h3><p>A crisis hits. Only you know one number, and you can tell the truth or lie.</p></article>
           <article><span className="feature-icon">02</span><h3>Argue, then vote.</h3><p>The Prime Minister splits 10 budget coins, and the cabinet votes yes or no.</p></article>
           <article><span className="feature-icon">03</span><h3>Survive and unmask.</h3><p>Keep Veloria alive for 3 years, then name the Mole.</p></article>
-        </div>
-        <p className="refresh-note">Refreshing reconnects you.</p>
+        </div>}
+        {!gameState && <p className="refresh-note">Refreshing reconnects you.</p>}
       </section>
 
       {showRules && <div className="rules-backdrop" role="presentation" onClick={() => setShowRules(false)}><section className="rules-modal" role="dialog" aria-modal="true" aria-labelledby="rules-title" onClick={event => event.stopPropagation()}><button className="rules-close" onClick={() => setShowRules(false)} aria-label="Close rules">×</button><span className="section-kicker">THE RULES OF VELORIA</span><h2 id="rules-title">Three steps to government</h2><ol className="rules-list"><li><strong>Get a secret clue.</strong><p>A crisis hits. Only you know one number, and you can tell the truth or lie.</p></li><li><strong>Argue, then vote.</strong><p>The Prime Minister splits 10 budget coins, and the cabinet votes yes or no.</p></li><li><strong>Survive and unmask.</strong><p>Keep Veloria alive for 3 years, then name the Mole.</p></li></ol><p className="helper-text">Refreshing reconnects you.</p></section></div>}

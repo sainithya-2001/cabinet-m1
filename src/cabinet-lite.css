@@ -133,3 +133,37 @@ footer { max-width:1180px; margin:auto; padding:18px 24px; display:flex; justify
   .coin-button { width:48px; height:48px; }
 }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { transition:none!important; scroll-behavior:auto!important; } }
+
+/* In-game layout: keep the session focused on the active cabinet. */
+.in-game .hero > .eyebrow,
+.in-game .hero > h1,
+.in-game .hero > .hero-copy,
+.in-game .game-panel > .panel-heading,
+.in-game .game-panel > #playerName,
+.in-game .game-panel > label,
+.in-game .game-panel > .primary-button,
+.in-game .game-panel > .join-divider,
+.in-game .game-panel > .join-row,
+.in-game .game-panel > .helper-text,
+.in-game .room-details > p:not(.helper-text),
+.in-game .room-details > h2,
+.in-game .room-details > button,
+.in-game .room-players,
+.in-game .feature-row,
+.in-game .refresh-note { display:none!important; }
+.in-game .hero { max-width:100%; padding:12px 18px 28px; }
+.in-game .game-panel { width:min(100%,980px); margin:0 auto; padding:0; border:0; background:var(--paper); box-shadow:none; }
+.in-game .room-details { margin:0; padding:0; border:0; background:var(--paper); }
+.in-game .live-game { margin:0; padding:clamp(14px,3vw,28px); background:#f7efdf; }
+.room-code-chip { padding:6px 9px; border:1px solid var(--rule); color:var(--burgundy); background:var(--paper-light); font:800 .7rem Arial,sans-serif; letter-spacing:.08em; }
+.clue-report { font-size:1.05rem; line-height:1.6; }
+.clue-report strong { font-size:1.2em; color:var(--burgundy); }
+.publish-clue { display:grid; grid-template-columns:minmax(0,1fr) minmax(100px,150px) auto; align-items:end; gap:10px; margin-top:16px; padding-top:12px; border-top:1px solid var(--rule); }
+.publish-clue label { color:var(--muted); font:800 .72rem Arial,sans-serif; text-transform:uppercase; }
+.publish-clue input { min-width:0; width:100%; min-height:44px; border:1px solid var(--rule); padding:9px; color:var(--ink); background:var(--paper-light); }
+.chat-clue-badge { display:inline-block; margin-right:7px; padding:2px 6px; border:1px solid var(--burgundy); color:var(--burgundy); font:800 .65rem Arial,sans-serif; letter-spacing:.06em; text-transform:uppercase; }
+.predicted-effects { padding:12px; border:1px dashed var(--rule); background:var(--paper); }
+.predicted-effects h4 { margin:0 0 8px; color:var(--burgundy); }
+.predicted-effects p { margin:4px 0; color:var(--muted); font-size:.9rem; }
+.in-game .topbar { max-width:100%; padding:10px 18px; }
+@media(max-width:650px) { .publish-clue { grid-template-columns:1fr 1fr; } .publish-clue label { grid-column:1/-1; } .publish-clue button { grid-column:1/-1; width:100%; } }

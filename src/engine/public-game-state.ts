@@ -1,7 +1,7 @@
 import type { CountryState, Indicator, DelayedEffect } from './types.ts';
 
 export type GamePlayer = { id: string; name: string; seat: number; isBot: boolean; ministry: string; isMole: boolean; ready: boolean };
-export type PublishedClue = { playerId: string; name: string; ministry: string; value: number; year: number; at: number };
+export type PublishedClue = { playerId: string; name: string; ministry: string; value: number; trueValue: number; year: number; at: number };
 export type PublicGamePlayer = Pick<GamePlayer, 'id' | 'name' | 'seat' | 'isBot' | 'ministry' | 'ready'>;
 export type PublicPublishedClue = Pick<PublishedClue, 'playerId' | 'name' | 'ministry' | 'value' | 'year' | 'at'>;
 export type PublicCountryState = Pick<CountryState, 'year' | 'economy' | 'happiness' | 'stability' | 'environment' | 'debt' | 'collapsed'> & {

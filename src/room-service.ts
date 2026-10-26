@@ -93,13 +93,13 @@ export type PublicGamePlayer = {
 export type PublicGameState = {
   version: number; status: 'waiting' | 'playing' | 'finished'; createdAt: number;
   phase: string; phaseStartedAt: number; phaseDeadline: number | null; year: number;
-  players: PublicGamePlayer[];
+  players: PublicGamePlayer[]; publishedClues: Array<{playerId:string;name:string;ministry:string;value:number;year:number;at:number}>;
   budgetDraft: Record<string, number> | null; votes: Record<string, boolean>; result: unknown;
   primeMinisterId?: string | null; voteChoices?: Record<string, boolean>; guesses?: Record<string, string>;
   country?: { economy:number; happiness:number; stability:number; environment:number; debt:number; collapsed:boolean; collapseReasons:string[] } | null;
   lastPassedBudget?: unknown; failedVotes?: number; crisisId?: string | null;
 };
-export type PrivateGameInfo = { ministry: string; isMole: boolean; clue: string; playerId?: string };
+export type PrivateGameInfo = { ministry: string; isMole: boolean; clue: string; trueValue: number; playerId?: string };
 async function callGameAction<T>(roomId: string, playerToken: string, action: string, payload?: unknown): Promise<T> {
   const { data, error } = await supabase.functions.invoke('cabinet-rooms', {
     body: { action, roomId, playerToken, ...(payload === undefined ? {} : { payload }) },
@@ -120,7 +120,7 @@ export async function getPrivateGameInfo(roomId: string, playerToken: string) {
 export async function markReady(roomId: string, playerToken: string) {
   return callGameAction<{ state: PublicGameState }>(roomId, playerToken, 'ready');
 }
-export type RoomChatMessage = { playerId: string; name: string; text: string; at: number };
+export type RoomChatMessage = { playerId: string; name: string; text: string; at: number; kind?: 'clue' };
 export async function sendRoomChat(roomId: string, playerToken: string, text: string) {
   return callGameAction<{ message: RoomChatMessage }>(roomId, playerToken, 'chat', { text });
 }
@@ -134,6 +134,20 @@ export function subscribeRoomChat(roomId: string, onMessage: (message: RoomChatM
   return () => { void supabase.removeChannel(channel); };
 }
 
+export async function publishMyClue(roomId: string, playerToken: string, value: number) {
+  return callGameAction<{state:PublicGameState; message:RoomChatMessage}>(roomId,playerToken,'publish-clue',{value});
+}
+export type BudgetPreview = { health:number; education:number; security:number; environment:number; economy:number; borrowing:0|10|20 };
+export async function sendBudgetPreview(roomId:string,playerToken:string,draft:BudgetPreview) {
+  return callGameAction<{ok:boolean}>(roomId,playerToken,'budget-preview',draft);
+}
+export function subscribeBudgetPreview(roomId:string,onDraft:(draft:BudgetPreview)=>void) {
+  const channel=supabase.channel('cabinet-chat:'+roomId);
+  channel.on('broadcast',{event:'budget-preview'},({payload})=>{
+    if(payload && ['health','education','security','environment','economy'].every(k=>Number.isInteger(payload[k])) && [0,10,20].includes(payload.borrowing)) onDraft(payload as BudgetPreview);
+  }).subscribe();
+  return () => { void supabase.removeChannel(channel); };
+}
 export type LiteBudgetDraft = { health:number; education:number; security:number; environment:number; economy:number; borrowing:0|10|20 };
 export async function submitLiteBudget(roomId:string,playerToken:string,budget:LiteBudgetDraft) {
   return callGameAction<{state:PublicGameState}>(roomId,playerToken,'budget',budget);

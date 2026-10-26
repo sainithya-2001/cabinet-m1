@@ -123,10 +123,11 @@ function botVoteChoices(state: LiteState): Record<string, boolean> {
 }
 function initialLiteState(players: PlayerRow[]): LiteState {
   if (players.length < 2 || players.length > 6) throw new Error("Cabinet Lite requires 2–6 human players to start.");
-  const seatRows = shuffle(players.map((p) => ({ row: p, isBot: false })));
+  const seatRows = players.map((p) => ({ row: p, isBot: false }));
   const botNames = ["Ada", "Boris", "Cleo", "Dmitri", "Elsie", "Felix"];
   while (seatRows.length < 5) seatRows.push({ row: { id: "bot-" + (seatRows.length + 1), player_name: botNames[seatRows.length] ?? "Bot", joined_at: new Date().toISOString(), player_token_hash: "" }, isBot: true });
-  const ministries = shuffle(["Finance", "Health", "Defense", "Education", "Environment", "Economy", "Infrastructure", "Intelligence"]).slice(0, seatRows.length);
+  const ministryOrder = ["Finance", "Health", "Defense", "Education", "Environment", "Economy"];
+  const ministries = ministryOrder.slice(0, seatRows.length);
   // The Mole may be any cabinet member, including a bot, as specified by the game rules.
   const moleIndex = crypto.getRandomValues(new Uint32Array(1))[0] % seatRows.length;
   const gamePlayers: GamePlayer[] = seatRows.map((item, seat) => ({
@@ -292,7 +293,16 @@ export default {
                       // PM rotation follows the ordered seats: all humans get their turn before bots.
                       const currentIndex=state.players.findIndex(p=>p.id===state.primeMinisterId);
                       const nextPm=state.players[(currentIndex+1+state.players.length)%state.players.length];
-                      next={...state,year,primeMinisterId:nextPm?.id ?? state.players[0]?.id ?? null,phase:"headline",phaseStartedAt:now,phaseDeadline:now+4000,readyByPlayer:{},budgetDraft:null,votes:{},voteChoices:{},pendingBudget:null,failedVotes:0,version:state.version+1};
+                      const privateByPlayer = { ...state.privateByPlayer };
+                      for (const minister of state.players) {
+                        const previous = privateByPlayer[minister.id];
+                        if (!previous) continue;
+                        const trueValue = minister.ministry === "Finance"
+                          ? 60 + (crypto.getRandomValues(new Uint32Array(1))[0] % 81)
+                          : crypto.getRandomValues(new Uint32Array(1))[0] % 61;
+                        privateByPlayer[minister.id] = { ...previous, trueValue };
+                      }
+                      next={...state,year,privateByPlayer,primeMinisterId:nextPm?.id ?? state.players[0]?.id ?? null,phase:"headline",phaseStartedAt:now,phaseDeadline:now+4000,readyByPlayer:{},budgetDraft:null,votes:{},voteChoices:{},pendingBudget:null,failedVotes:0,version:state.version+1};
                     }
                   } else if(state.phase==="guess") {
                     status="finished";
@@ -322,11 +332,24 @@ export default {
           if(latest.publishedClues.some(c=>c.playerId===player.id && c.year===latest.year)) throw new Error("You have already published your clue this year.");
           const value=Number(payload.value), min=secret.ministry==="Finance"?60:0, max=secret.ministry==="Finance"?140:60;
           if(value<min || value>max) throw new Error(`Your clue must be between ${min} and ${max}.`);
-          const publishedClues=[...latest.publishedClues,{playerId:player.id,name:player.player_name,ministry:secret.ministry,value,year:latest.year,at:Date.now()}];
+          const publishedClues=[...latest.publishedClues,{playerId:player.id,name:player.player_name,ministry:secret.ministry,value,trueValue:secret.trueValue,year:latest.year,at:Date.now()}];
           return {state:{...latest,publishedClues}};
         });
-        return jsonResponse({state:publicState(saved.state)});
+        const published=saved.state.publishedClues.find(c=>c.playerId===player.id&&c.year===saved.state.year);
+        if(!published) throw new Error("Published clue was not saved.");
+        const message={playerId:player.id,name:player.player_name,text:`${published.ministry}: ${published.ministry==="Finance"?"revenue is":"need is"} ${published.value}`,at:published.at,kind:"clue"};
+        try { const sent=await db.channel("cabinet-chat:"+room.id).send({type:"broadcast",event:"chat-message",payload:message}); if(sent==="error") throw new Error("Could not broadcast clue."); }
+        catch(e) { console.error("Clue chat broadcast failed:",e); }
+        return jsonResponse({state:publicState(saved.state),message});
       } catch(e) { return jsonResponse({error:e instanceof Error?e.message:"Could not publish clue."},409); }
+    }
+    if(body.action==="budget-preview") {
+      const payload=body.payload as Record<string,unknown>|undefined;
+      const lines=["health","education","security","environment","economy"];
+      if(!payload || lines.some(k=>!Number.isInteger(payload[k]) || Number(payload[k])<0 || Number(payload[k])>10) || lines.reduce((sum,k)=>sum+Number(payload[k]??0),0)>10 || ![0,10,20].includes(Number(payload.borrowing))) return jsonResponse({error:"Invalid budget preview."},400);
+      if(!state || state.phase!=="budget" || state.primeMinisterId!==player.id) return jsonResponse({error:"Only the PM can preview a budget during the budget phase."},409);
+      try { const sent=await db.channel("cabinet-chat:"+room.id).send({type:"broadcast",event:"budget-preview",payload}); if(sent==="error") throw new Error("Could not broadcast budget preview."); return jsonResponse({ok:true}); }
+      catch(e) { return jsonResponse({error:e instanceof Error?e.message:"Could not send budget preview."},500); }
     }
     if(body.action==="private") {
       if(!state)return jsonResponse({private:null});
