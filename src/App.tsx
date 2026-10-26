@@ -61,6 +61,7 @@ export default function App() {
   const [roomCode, setRoomCode] = useState(() => new URLSearchParams(window.location.search).get('room')?.toUpperCase() ?? '');
 const soloMode = new URLSearchParams(window.location.search).get('solo') === '1';
   const [room, setRoom] = useState<RoomInfo | null>(null);
+  const [isHost, setIsHost] = useState(false);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
 const [players, setPlayers] = useState<RoomPlayer[]>([]);
@@ -194,9 +195,9 @@ useEffect(() => { if (gameState?.phase !== 'budget') setBudgetPreview(gameState?
     catch (e) { setMessage(e instanceof Error ? e.message : 'Could not record vote.'); }
   }
 
-  async function handleStartGame() {
+  async function handleStartGame(solo = soloMode) {
     if (!room) return; setLoading(true); setMessage('');
-    try { const r = await startGame(room.roomId, room.playerToken, soloMode); setGameState(r.state); setPrivateInfo(r.private); setClueDraft(r.private.trueValue); setBudgetPreview(r.state.budgetDraft); }
+    try { const r = await startGame(room.roomId, room.playerToken, solo); setGameState(r.state); setPrivateInfo(r.private); setClueDraft(r.private.trueValue); setBudgetPreview(r.state.budgetDraft); }
     catch (e) { setMessage(e instanceof Error ? e.message : 'Could not start game.'); }
     finally { setLoading(false); }
   }
@@ -241,6 +242,7 @@ useEffect(() => { if (gameState?.phase !== 'budget') setBudgetPreview(gameState?
       const created = await createRoom(playerName.trim());
       const result = { ...created };
       setRoom(result);
+      setIsHost(true);
       setRoomCode(result.roomCode);
       setMessage(`Room ${result.roomCode} created! Invite another player to join.`);
     } catch (error) {
@@ -262,6 +264,7 @@ useEffect(() => { if (gameState?.phase !== 'budget') setBudgetPreview(gameState?
     try {
       const joined = await joinRoom(roomCode, playerName);
       setRoom(joined);
+      setIsHost(false);
       setMessage(`You joined room ${joined.roomCode}!`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not join the room.');
@@ -346,6 +349,7 @@ useEffect(() => { if (gameState?.phase !== 'budget') setBudgetPreview(gameState?
             </button>
           </div>
 
+          {message === 'Reconnecting…' && <p className="helper-text reconnecting-notice" role="status" aria-live="polite">Reconnecting… refreshing the latest room state.</p>}
           {!gameState && message && (
             <p className="helper-text" role="status">
               {message}
@@ -367,7 +371,9 @@ useEffect(() => { if (gameState?.phase !== 'budget') setBudgetPreview(gameState?
               </button></>}
 
 {!gameState && <button className="primary-button" onClick={handleStartGame} disabled={loading}>{loading ? 'Starting…' : 'Start game'}</button>}
+{!gameState && isHost && <button className="secondary-button" onClick={async () => { const url = new URL(window.location.href); url.searchParams.set('solo', '1'); window.history.replaceState({}, '', url); await handleStartGame(true); }} disabled={loading}>{loading ? 'Starting…' : 'Start solo game'}</button>}
 {gameState && <GameScreenErrorBoundary><section className="live-game" aria-live="polite">
+  {message === 'Reconnecting…' && <p className="helper-text reconnecting-notice" role="status" aria-live="polite">Reconnecting… refreshing the latest room state.</p>}
   <div className="live-topline"><strong className="room-code-chip">ROOM {room.roomCode}</strong><strong>YEAR {gameState.year} / 3</strong><strong className="phase-clock-mini">{secondsLeft===null?'—':secondsLeft+'s'}</strong><div className="indicator-gauges">{gameState.country&&([['economy','Economy',gameState.country.economy],['happiness','Happiness',gameState.country.happiness],['stability','Stability',gameState.country.stability],['environment','Environment',gameState.country.environment],['debt','Debt',gameState.country.debt]] as Array<[string,string,number]>).map(([key,label,value])=><div className="indicator-gauge" key={key}><span>{label} <b>{Math.round(value)}</b></span><i><span style={{width:Math.max(0,Math.min(100,value))+'%'}}/></i></div>)}</div></div><div className="phase-tracker">{(['clue','budget','vote','result'] as const).map((phase,index)=><div key={phase} className={'phase-step '+(gameState.phase===phase?'current':'')}><span>{index+1}</span><b>{({clue:'Clues',budget:'Budget',vote:'Vote',result:'Results'} as Record<string,string>)[phase]}</b></div>)}</div><div className="speaker-banner"><img src="/images/speaker-thunderbottom.webp" alt="Speaker Thunderbottom"/><div className="speaker-order-bubble"><strong>ORDER!</strong><span>{gameState.crisisId ? ({'outbreak':'Disease outbreak','floods':'Severe flooding','border-tension':'Border tensions','recession':'Economic recession','heatwave':'Extreme heatwave','teacher-strike':'Teachers on strike','cyberattack':'National cyberattack','housing-shortage':'Housing shortage','energy-price-spike':'Energy price spike','protests':'Nationwide protests','export-boom':'Export boom','tech-breakthrough':'Technology breakthrough'} as Record<string,string>)[gameState.crisisId] ?? 'Breaking national news' : (phaseCopy[gameState.phase]?.order ?? 'The House will come to order!')}</span></div></div><div className="phase-status"><div><span className="section-kicker">YEAR {gameState.year} OF 3 · {gameState.phase.toUpperCase()}</span><h2>{phaseCopy[gameState.phase]?.title ?? 'Cabinet in session'}</h2><p>{phaseCopy[gameState.phase]?.instruction ?? 'Follow the cabinet proceedings.'}</p></div></div>
   {gameState.phase === 'clue' && privateInfo && <div className="private-role classified-dossier"><h3>Your private dossier <span>CLASSIFIED</span></h3><p className="clue-report">{privateInfo.ministry === 'Finance' ? <>Treasury report: revenue is <strong>{privateInfo.trueValue}</strong>.</> : privateInfo.ministry === 'Health' ? <>Hospital report: {privateInfo.trueValue * 10} patients in corridors. Health needs <strong>{privateInfo.trueValue}</strong>.</> : privateInfo.ministry === 'Defense' ? <>Security briefing: Defense needs <strong>{privateInfo.trueValue}</strong>.</> : privateInfo.ministry === 'Education' ? <>School report: Education needs <strong>{privateInfo.trueValue}</strong>.</> : privateInfo.ministry === 'Environment' ? <>Climate report: Environment needs <strong>{privateInfo.trueValue}</strong>.</> : <>Industry report: Economy needs <strong>{privateInfo.trueValue}</strong>.</>}</p><p>Ministry: <strong>{privateInfo.ministry}</strong></p><p>Secret: <strong>{privateInfo.isMole ? 'Mole' : 'Cabinet member'}</strong></p>{gameState.phase === 'clue' && !gameState.publishedClues?.some(c => c.playerId === privateInfo.playerId && c.year === gameState.year) && <div className="publish-clue"><label htmlFor="clue-value">Publish my clue</label><input id="clue-value" type="number" min={privateInfo.ministry === 'Finance' ? 60 : 0} max={privateInfo.ministry === 'Finance' ? 140 : 60} value={clueDraft ?? privateInfo.trueValue} onChange={e=>setClueDraft(Number(e.target.value))}/><button className="secondary-button" onClick={handlePublishClue} disabled={clueDraft === null || !Number.isInteger(clueDraft)}>Publish clue</button></div>}</div>}
   {gameState.phase === 'guess' && <div className="mole-guess"><h3>Who is the Mole?</h3><p>Choose the player you suspect. Your guess is final.</p>{gameState.players.filter(p=>!p.isBot && p.id !== privateInfo?.playerId).map(p=><button key={p.id} className="secondary-button" onClick={()=>handleGuess(p.id)}>{p.name}</button>)}</div>}

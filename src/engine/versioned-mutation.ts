@@ -1,3 +1,5 @@
+export const MAX_VERSIONED_MUTATION_ATTEMPTS = 12;
+
 export type VersionedState = { version: number };
 export type StateRead<S, Status extends string = string> = { state: S | null; status: Status };
 export type MutationDecision<S, Status extends string = string> = {
@@ -14,7 +16,7 @@ export type VersionedStateAdapter<S extends VersionedState, Status extends strin
 export async function mutateVersionedState<S extends VersionedState, Status extends string = string>(
   adapter: VersionedStateAdapter<S, Status>,
   apply: (latest: S | null, status: Status) => MutationDecision<S, Status>,
-  maxAttempts = 5,
+  maxAttempts = MAX_VERSIONED_MUTATION_ATTEMPTS,
 ): Promise<StateRead<S, Status>> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const { state: latest, status } = await adapter.read();
@@ -26,5 +28,5 @@ export async function mutateVersionedState<S extends VersionedState, Status exte
       return { state: next, status: nextStatus };
     }
   }
-  throw new Error("The game changed while saving. Please try again.");
+  throw new Error(`Please try again. Version conflict after ${maxAttempts} save attempts.`);
 }

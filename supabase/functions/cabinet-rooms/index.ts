@@ -242,7 +242,13 @@ export default {
       try {
         const initial=initialLiteState((rows??[]) as PlayerRow[], (body.payload as Record<string,unknown>|undefined)?.solo === true);
         const saved=await mutateGameState(db,room.id,(latest,roomStatus)=>{
-          if(roomStatus!=="waiting" || (latest && (latest.version!==0 || Object.keys(latest).some(k=>k!=="version"))))throw new Error("This game has already started.");
+          if (roomStatus !== "waiting") {
+            if (latest) return { state: latest, status: roomStatus, changed: false };
+            throw new Error("This room is no longer waiting and has no game state.");
+          }
+          if (latest && (latest.version !== 0 || Object.keys(latest).some(k => k !== "version"))) {
+            throw new Error("The waiting room state is not a fresh lobby.");
+          }
           return {state:initial,status:"playing"};
         });
         return jsonResponse({state:publicState(saved.state),private:{...saved.state.privateByPlayer[player.id],playerId:player.id}});
@@ -250,9 +256,16 @@ export default {
     }
     if(body.action==="state") {
       if (room.status === "waiting") return jsonResponse({state:null,status:"waiting"});
+      const observedPhase = state?.phase;
+      const observedYear = state?.year;
+      const observedDeadline = state?.phaseDeadline;
       try {
         const saved = await mutateGameState(db, room.id, (state, roomStatus) => {
           if (!state) throw new Error("The game has not started.");
+          // Another request may already have advanced the deadline we observed.
+          if (state.phase !== observedPhase || state.year !== observedYear || state.phaseDeadline !== observedDeadline) {
+            return { state, status: roomStatus, changed: false };
+          }
           const now=Date.now();
           let next=state;
           if (!(state.status==="playing" && state.phaseDeadline!==null && now>=state.phaseDeadline)) return {state,status:roomStatus,changed:false};
@@ -371,6 +384,7 @@ export default {
       try {
         const saved = await mutateGameState(db, room.id, (latest, roomStatus) => {
           if (!latest || latest.status !== "playing" || roomStatus !== "playing") throw new Error("The game has not started.");
+          if (latest.readyByPlayer[player.id]) return { state: latest, changed: false };
           const readyByPlayer = { ...latest.readyByPlayer, [player.id]: true };
           const humans = latest.players.filter(p => !p.isBot);
           const everyoneReady = humans.length > 0 && humans.every(p => readyByPlayer[p.id]);

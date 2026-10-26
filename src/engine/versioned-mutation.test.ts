@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mutateVersionedState, type VersionedStateAdapter } from './versioned-mutation.ts';
+import { MAX_VERSIONED_MUTATION_ATTEMPTS, mutateVersionedState, type VersionedStateAdapter } from './versioned-mutation.ts';
 import { toPublicGameState, type GamePlayer } from './public-game-state.ts';
 
 type State = { version: number; status: string; votes: Record<string, boolean>; budget: string | null; privateByPlayer?: Record<string, { clue: string; trueValue: number; isMole: boolean }>; players?: Array<{ id: string; isMole?: boolean }>; publishedClues?: Array<Record<string, unknown>> };
@@ -52,15 +52,15 @@ describe('mutateVersionedState', () => {
     expect(db.get().votes).toEqual({ bob: true });
     expect(db.get().version).toBe(3);
   });
-  it('returns the retry error after five failed compare-and-swap attempts', async () => {
+  it('returns the retry error after all compare-and-swap attempts', async () => {
     let reads = 0, writes = 0;
     const adapter: VersionedStateAdapter<State> = {
       async read() { reads++; return { state: { version: reads, status: 'playing', votes: {}, budget: null }, status: 'playing' }; },
       async compareAndSwap() { writes++; return false; },
     };
     await expect(mutateVersionedState(adapter, s => ({ state: { ...s!, votes: { a: true } } }))).rejects.toThrow('Please try again');
-    expect(reads).toBe(5);
-    expect(writes).toBe(5);
+    expect(reads).toBe(MAX_VERSIONED_MUTATION_ATTEMPTS);
+    expect(writes).toBe(MAX_VERSIONED_MUTATION_ATTEMPTS);
   });
 });
 describe('public state privacy', () => {

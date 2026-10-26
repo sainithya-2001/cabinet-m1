@@ -101,12 +101,31 @@ export type PublicGameState = {
 };
 export type PrivateGameInfo = { ministry: string; isMole: boolean; clue: string; trueValue: number; playerId?: string };
 async function callGameAction<T>(roomId: string, playerToken: string, action: string, payload?: unknown): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('cabinet-rooms', {
-    body: { action, roomId, playerToken, ...(payload === undefined ? {} : { payload }) },
-  });
-  if (error) throw new Error(error.message || 'Could not connect to the game server.');
-  if (!data || data.error) throw new Error(data?.error || 'The game server returned an invalid response.');
-  return data as T;
+  const body = { action, roomId, playerToken, ...(payload === undefined ? {} : { payload }) };
+  for (let attempt = 0; attempt <= 2; attempt++) {
+    const { data, error } = await supabase.functions.invoke('cabinet-rooms', { body });
+    if (!error && data && !data.error) return data as T;
+    const context = error && typeof error === 'object' && 'context' in error
+      ? (error as { context?: Response }).context
+      : undefined;
+    if (context?.status === 409 || (data && typeof data.error === 'string' && /conflict|changed while saving/i.test(data.error))) {
+      let reason = data?.error || error?.message || 'The room changed while this action was being saved.';
+      try {
+        const responseBody = await context?.clone().json();
+        if (typeof responseBody?.error === 'string') reason = responseBody.error;
+      } catch { /* Keep the error message already available. */ }
+      console.error(`[cabinet-rooms] ${action} returned 409:`, reason);
+      if (attempt < 2) continue;
+      const refreshed = await supabase.functions.invoke('cabinet-rooms', {
+        body: { action: 'state', roomId, playerToken },
+      });
+      if (refreshed.error) console.error('[cabinet-rooms] state refresh after conflict failed:', refreshed.error.message);
+      throw new Error('Reconnecting…');
+    }
+    if (error) throw new Error(error.message || 'Could not connect to the game server.');
+    throw new Error(data?.error || 'The game server returned an invalid response.');
+  }
+  throw new Error('Reconnecting…');
 }
 export async function startGame(roomId: string, playerToken: string, solo = false) {
   return callGameAction<{ state: PublicGameState; private: PrivateGameInfo }>(roomId, playerToken, 'start', { solo });
