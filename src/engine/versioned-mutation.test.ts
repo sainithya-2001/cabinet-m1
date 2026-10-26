@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { mutateVersionedState, type VersionedStateAdapter } from './versioned-mutation.js';
-import { toPublicGameState, type GamePlayer } from './public-game-state.js';
+import { mutateVersionedState, type VersionedStateAdapter } from './versioned-mutation.ts';
+import { toPublicGameState, type GamePlayer } from './public-game-state.ts';
 
 type State = { version: number; status: string; votes: Record<string, boolean>; budget: string | null; privateByPlayer?: Record<string, { clue: string; trueValue: number; isMole: boolean }>; players?: Array<{ id: string; isMole?: boolean }>; publishedClues?: Array<Record<string, unknown>> };
 type PrivatePlayerData = { ministry: string; isMole: boolean; clue: string; trueValue: number };
