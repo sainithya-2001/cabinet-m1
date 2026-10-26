@@ -17,7 +17,7 @@ type RoomInfo = {
 
 export default function App() {
   const [playerName, setPlayerName] = useState('');
-  const [roomCode, setRoomCode] = useState('');
+  const [roomCode, setRoomCode] = useState(() => new URLSearchParams(window.location.search).get('room')?.toUpperCase() ?? '');
   const [room, setRoom] = useState<RoomInfo | null>(null);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -265,8 +265,10 @@ const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.c
               <button
                 className="secondary-button"
                 onClick={() => {
-                  void navigator.clipboard.writeText(room.roomCode);
-                  setMessage('Room code copied! Share it with another player.');
+                  const inviteUrl = new URL(window.location.href);
+                  inviteUrl.searchParams.set('room', room.roomCode);
+                  void navigator.clipboard.writeText(inviteUrl.toString());
+                  setMessage('Invite link copied. Friends only need to enter their name.');
                 }}
               >
                 Copy room code
