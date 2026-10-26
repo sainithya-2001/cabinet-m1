@@ -279,8 +279,21 @@ export default {
           const duration=phase==="clue"?(year===1?60000:30000):phase==="budget"?(year===1?40000:30000):phase==="vote"?(year===1?15000:10000):phase==="result"?(year===1?15000:10000):30000;
           next={...state,phase,phaseStartedAt:now,phaseDeadline:now+duration,readyByPlayer:{},version:state.version+1};
         }
-        const {error:updateError}=await db.from("game_rooms").update({game_state:next,status:next.status}).eq("id",room.id).eq("status","playing");
+        // Compare-and-swap the version so simultaneous client polls cannot advance the same deadline twice.
+        const {data:updated,error:updateError}=await db.from("game_rooms")
+          .update({game_state:next,status:next.status})
+          .eq("id",room.id)
+          .eq("status","playing")
+          .eq("game_state->>version",String(state.version))
+          .select("game_state,status")
+          .maybeSingle();
         if(updateError)return jsonResponse({error:"Could not advance game phase."},500);
+        if(!updated) {
+          const {data:latest,error:latestError}=await db.from("game_rooms").select("game_state,status").eq("id",room.id).maybeSingle();
+          if(latestError||!latest)return jsonResponse({error:"Could not reload game state."},500);
+          const latestState=latest.game_state as LiteState | null;
+          return jsonResponse({state:latestState?publicState(latestState):null,status:latest.status});
+        }
       }
       return jsonResponse({state:publicState(next),status:next.status});
     }
