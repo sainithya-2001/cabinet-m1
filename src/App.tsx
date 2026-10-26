@@ -8,7 +8,7 @@ import {
   type RoomPlayer,
   startGame, getGameState, getPrivateGameInfo, markReady, sendRoomChat, submitLiteBudget, castBudgetVote, submitMoleGuess,
   type PublicGameState, type PrivateGameInfo, type RoomChatMessage, subscribeRoomChat,
-} from './room-service.js';
+} from './room-service.ts';
 type RoomInfo = {
   roomCode: string;
   roomId: string;
