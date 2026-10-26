@@ -100,8 +100,22 @@ export type PublicGameState = {
   lastPassedBudget?: unknown; failedVotes?: number; crisisId?: string | null;
 };
 export type PrivateGameInfo = { ministry: string; isMole: boolean; clue: string; trueValue: number; playerId?: string };
+function toPlainPayload(payload: unknown): unknown {
+  if (payload === null || typeof payload === 'string' || typeof payload === 'number' || typeof payload === 'boolean') return payload;
+  if (Array.isArray(payload)) return payload.map(toPlainPayload);
+  if (typeof payload !== 'object' || Object.getPrototypeOf(payload) !== Object.prototype) {
+    throw new Error('Invalid request payload: expected plain data.');
+  }
+  return Object.fromEntries(Object.entries(payload as Record<string, unknown>).map(([key, value]) => [key, toPlainPayload(value)]));
+}
+
 async function callGameAction<T>(roomId: string, playerToken: string, action: string, payload?: unknown): Promise<T> {
-  const body = { action, roomId, playerToken, ...(payload === undefined ? {} : { payload }) };
+  const body = {
+    action: String(action),
+    roomId: String(roomId),
+    playerToken: String(playerToken),
+    ...(payload === undefined ? {} : { payload: toPlainPayload(payload) }),
+  };
   for (let attempt = 0; attempt <= 2; attempt++) {
     const { data, error } = await supabase.functions.invoke('cabinet-rooms', { body });
     if (!error && data && !data.error) return data as T;
