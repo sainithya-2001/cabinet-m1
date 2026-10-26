@@ -1,4 +1,4 @@
-import type { Indicator, Sector } from './types.js';
+import type { Indicator, Sector } from './types.ts';
 
 /** Versioned tuning knobs. Values marked provisional should be calibrated by the simulator. */
 export const PARAMS_VERSION = '0.1.1';
