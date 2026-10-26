@@ -289,8 +289,8 @@ export default {
           next={...next,country:resolution.state,lastPassedBudget:state.pendingBudget,failedVotes:0,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:now+(state.year===1?15000:10000),result:{passed:true,yes,no,resolution},pendingBudget:null,voteChoices:{},votes:{},budgetDraft:null,version:next.version+1};
           if(resolution.state.collapsed)next={...next,status:"finished",phase:"finished",phaseDeadline:null};
         } else if(state.failedVotes===0) {
-          const pm=state.players.find(p=>p.id===state.players.filter(x=>!x.isBot)[(state.year)%humans.length]?.id) ?? humans[0];
-          next={...next,failedVotes:1,phase:"budget",phaseStartedAt:now,phaseDeadline:now+20000,pendingBudget:null,budgetDraft:null,voteChoices:{},votes:{},result:{passed:false,yes,no,redraftBy:pm?.id},version:next.version+1};
+          const pm=humans.find(p=>p.id===state.primeMinisterId) ?? humans[0];
+          next={...next,primeMinisterId:pm?.id ?? null,failedVotes:1,phase:"budget",phaseStartedAt:now,phaseDeadline:now+20000,pendingBudget:null,budgetDraft:null,voteChoices:{},votes:{},result:{passed:false,yes,no,redraftBy:pm?.id},version:next.version+1};
         } else {
           const fallback=state.lastPassedBudget ?? {shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment:12},borrowing:0};
           const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[crypto.getRandomValues(new Uint32Array(1))[0] % CRISIS_TEMPLATES.length].id,2);
