@@ -1,3 +1,4 @@
+import './cabinet-lite.css';
 
 import { useEffect, useState } from 'react';
 import {
@@ -269,7 +270,7 @@ const [budgetDraft, setBudgetDraft] = useState({health:2,education:2,security:2,
   {gameState.phase === 'budget' && <div className="lite-budget">
     <h3>Draft the ten-coin budget</h3>
     {privateInfo?.playerId !== gameState.primeMinisterId && <p>Only the current Prime Minister can submit the budget.</p>}
-    {(['health','education','security','environment','economy'] as const).map(line => <label key={line} style={{display:'flex',justifyContent:'space-between',gap:12,margin:'8px 0',textTransform:'capitalize'}}>{line}<select value={budgetDraft[line]} onChange={e=>setBudgetDraft(d=>({...d,[line]:Number(e.target.value)}))}>{Array.from({length:11},(_,n)=><option key={n} value={n}>{n} coin{n===1?'':'s'}</option>)}</select></label>)}
+    {(['health','education','security','environment','economy'] as const).map(line => <label key={line} style={{display:'flex',justifyContent:'space-between',gap:12,margin:'8px 0',textTransform:'capitalize'}}>{line}<select value={budgetDraft[line]} onChange={e=>setBudgetDraft(d=>({...d,[line]:Number(e.target.value)}))}>{Array.from({length:11},(_,n)=><option key={n} value={n} disabled={n > budgetDraft[line] && (budgetDraft.health+budgetDraft.education+budgetDraft.security+budgetDraft.environment+budgetDraft.economy-budgetDraft[line]+n)>10}>{n} coin{n===1?'':'s'}</option>)}</select></label>)}
     <p>Coins allocated: {budgetDraft.health+budgetDraft.education+budgetDraft.security+budgetDraft.environment+budgetDraft.economy} / 10</p>
     <label>Borrowing <select value={budgetDraft.borrowing} onChange={e=>setBudgetDraft(d=>({...d,borrowing:Number(e.target.value) as 0|10|20}))}><option value={0}>0</option><option value={10}>10</option><option value={20}>20</option></select></label>
     <button className="primary-button" onClick={handleSubmitBudget} disabled={privateInfo?.playerId !== gameState.primeMinisterId || budgetDraft.health+budgetDraft.education+budgetDraft.security+budgetDraft.environment+budgetDraft.economy!==10}>Submit budget</button>
