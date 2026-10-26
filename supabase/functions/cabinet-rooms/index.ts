@@ -1,6 +1,8 @@
 import { createInitialState, resolveYear } from "../../../src/engine/economy.ts";
 import { makeCrisis, CRISIS_TEMPLATES } from "../../../src/engine/crises.ts";
 import type { Budget, CountryState, YearInputs } from "../../../src/engine/types.ts";
+import { mutateVersionedState } from "../../../src/engine/versioned-mutation.ts";
+import { toPublicGameState } from "../../../src/engine/public-game-state.ts";
 import { withSupabase } from "@supabase/server";
 
 type RequestBody = {
@@ -15,7 +17,7 @@ type LiteState = {
   phase: string; phaseStartedAt: number; phaseDeadline: number | null; year: number;
   players: GamePlayer[]; privateByPlayer: Record<string, { ministry: string; isMole: boolean; clue: string; trueValue: number }>;
   publishedClues: Array<{ playerId: string; name: string; ministry: string; value: number; year: number; at: number }>;
-  readyByPlayer: Record<string, boolean>; chat: Array<{playerId:string;name:string;text:string;at:number}>;
+  readyByPlayer: Record<string, boolean>;
   budgetDraft: Record<string, number> | null; votes: Record<string, boolean>; result: unknown;
   lastActionAt: Record<string, number>;
   country: CountryState | null;
@@ -32,22 +34,21 @@ type LiteState = {
 function jsonResponse(body: Record<string, unknown>, status = 200): Response { return Response.json(body, { status }); }
 type MutationResult = { state: LiteState; status?: string; changed?: boolean };
 async function mutateGameState(db: Db, roomId: string, apply: (latest: LiteState | null, roomStatus: string) => MutationResult): Promise<{ state: LiteState; status: string }> {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const { data: row, error: readError } = await db.from("game_rooms").select("game_state,status").eq("id", roomId).maybeSingle();
-    if (readError || !row) throw new Error("Could not reload game state.");
-    const latest = row.game_state as LiteState | null;
-    const applied = apply(latest, row.status as string);
-    if (applied.changed === false && latest) return { state: latest, status: row.status as string };
-    const next = { ...applied.state, version: (latest?.version ?? 0) + 1 };
-    let update = db.from("game_rooms").update({ game_state: next, status: applied.status ?? next.status }).eq("id", roomId);
-    update = latest ? update.eq("game_state->>version", String(latest.version)) : update.is("game_state", null);
-    const { data: saved, error: saveError } = await update.select("game_state,status").maybeSingle();
-    if (saveError) throw new Error("Could not save game state.");
-    if (saved) return { state: saved.game_state as LiteState, status: saved.status as string };
-  }
-  throw new Error("The game changed while saving. Please try again.");
+  return mutateVersionedState<LiteState, string>({
+    async read() {
+      const { data: row, error } = await db.from("game_rooms").select("game_state,status").eq("id", roomId).maybeSingle();
+      if (error || !row) throw new Error("Could not reload game state.");
+      return { state: row.game_state as LiteState | null, status: row.status as string };
+    },
+    async compareAndSwap(expectedVersion, next, status) {
+      let update = db.from("game_rooms").update({ game_state: next, status }).eq("id", roomId);
+      update = expectedVersion !== null ? update.eq("game_state->>version", String(expectedVersion)) : update.is("game_state", null);
+      const { data: saved, error } = await update.select("id").maybeSingle();
+      if (error) throw new Error("Could not save game state.");
+      return Boolean(saved);
+    },
+  }, apply);
 }
-
 function randomToken(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -77,10 +78,7 @@ function makePrivateClue(ministry: string): string {
   };
   return clues[ministry] ?? "Watch the budget and look for inconsistencies in other ministers' claims.";
 }
-function publicState(state: LiteState) {
-  const { privateByPlayer: _private, readyByPlayer: _ready, lastActionAt: _rateLimit, ...visible } = state;
-  return { ...visible, players: visible.players.map(({ isMole: _mole, ...player }) => player) };
-}
+function publicState(state: LiteState) { return toPublicGameState(state); }
 async function findPlayer(db: Db, roomId: string, token: string) {
   const tokenHash = await hashToken(token);
   const { data: player, error } = await db.from("game_players").select("id,player_name,joined_at,player_token_hash").eq("room_id", roomId).eq("player_token_hash", tokenHash).maybeSingle();
@@ -154,7 +152,7 @@ function initialLiteState(players: PlayerRow[]): LiteState {
   return {
     version: 1, status: "playing", createdAt: Date.now(), phase: "headline",
     phaseStartedAt: Date.now(), phaseDeadline: Date.now() + 4000, year: 1,
-    players: ordered, privateByPlayer, publishedClues: [], readyByPlayer: {}, chat: [],
+    players: ordered, privateByPlayer, publishedClues: [], readyByPlayer: {},
     budgetDraft: null, votes: {}, result: null, lastActionAt: {},
     country: createInitialState(), lastPassedBudget: null, failedVotes: 0,
     pendingBudget: null, voteChoices: {}, crisisId: CRISIS_TEMPLATES[crypto.getRandomValues(new Uint32Array(1))[0] % CRISIS_TEMPLATES.length].id, yearResolution: null,
@@ -415,16 +413,15 @@ export default {
       const payload=body.payload as Record<string,unknown>|undefined;
       if(typeof payload?.text!=="string")return jsonResponse({error:"Message text is required."},400);
       const text=payload.text.trim();if(!text||text.length>140)return jsonResponse({error:"Messages must be 1–140 characters."},400);
-      try{
-        const saved=await mutateGameState(db,room.id,(latest,roomStatus)=>{
-          if(!latest||latest.status!=="playing"||roomStatus!=="playing")throw new Error("The game has not started.");
-          if(["vote","result","finished"].includes(latest.phase))throw new Error("Chat is closed during voting and results.");
-          const now=Date.now(),last=latest.lastActionAt[player.id]??0;if(now-last<1000)throw new Error("Please wait before sending another message.");
-          const chat=[...(latest.chat??[]),{playerId:player.id,name:player.player_name,text,at:now}].slice(-100);
-          return {state:{...latest,chat,lastActionAt:{...latest.lastActionAt,[player.id]:now}}};
-        });
-        return jsonResponse({state:publicState(saved.state)});
-      }catch(e){return jsonResponse({error:e instanceof Error?e.message:"Could not send message."},409);}
+      if(!state||state.status!=="playing"||room.status!=="playing")return jsonResponse({error:"The game has not started."},409);
+      if(["vote","result","finished"].includes(state.phase))return jsonResponse({error:"Chat is closed during voting and results."},409);
+      const message={playerId:player.id,name:player.player_name,text,at:Date.now()};
+      try {
+        const channel=db.channel("cabinet-chat:"+room.id);
+        const sent=await channel.send({type:"broadcast",event:"chat-message",payload:message});
+        if(sent==="error")throw new Error("Could not broadcast chat message.");
+        return jsonResponse({message});
+      } catch(e) { return jsonResponse({error:e instanceof Error?e.message:"Could not send message."},500); }
     }
     return jsonResponse({error:"Unknown action."},400);
   }),
