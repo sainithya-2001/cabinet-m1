@@ -3,6 +3,7 @@ type PublicGameLike = {
   privateByPlayer?: unknown;
   readyByPlayer?: unknown;
   lastActionAt?: unknown;
+  chat?: unknown;
   players?: PublicPlayer[];
   publishedClues?: Array<Record<string, unknown>>;
   [key: string]: unknown;
@@ -14,6 +15,7 @@ export function toPublicGameState<T extends PublicGameLike>(state: T) {
     privateByPlayer: _private,
     readyByPlayer: _ready,
     lastActionAt: _rateLimit,
+    chat: _chat,
     ...visible
   } = state;
   return {
