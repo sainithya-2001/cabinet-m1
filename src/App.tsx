@@ -5,7 +5,7 @@ import {
   joinRoom,
   getRoomPlayers,
   type RoomPlayer,
-  startGame, getGameState, getPrivateGameInfo, markReady, sendRoomChat,
+  startGame, getGameState, getPrivateGameInfo, markReady, sendRoomChat, submitLiteBudget, castBudgetVote,
   type PublicGameState, type PrivateGameInfo,
 } from './room-service.js';
 type RoomInfo = {
@@ -24,6 +24,7 @@ const [players, setPlayers] = useState<RoomPlayer[]>([]);
 const [gameState, setGameState] = useState<PublicGameState | null>(null);
 const [privateInfo, setPrivateInfo] = useState<PrivateGameInfo | null>(null);
 const [chatText, setChatText] = useState('');
+const [budgetDraft, setBudgetDraft] = useState({health:2,education:2,security:2,environment:2,economy:2,borrowing:0 as 0|10|20});
 
 
   useEffect(() => {
@@ -81,6 +82,17 @@ const [chatText, setChatText] = useState('');
     const id = window.setInterval(() => { void refreshGame(); }, 2000);
     return () => { active = false; window.clearInterval(id); };
   }, [room]);
+
+  async function handleSubmitBudget() {
+    if (!room) return;
+    try { const r = await submitLiteBudget(room.roomId, room.playerToken, budgetDraft); setGameState(r.state); setMessage('Budget submitted for a vote.'); }
+    catch (e) { setMessage(e instanceof Error ? e.message : 'Could not submit budget.'); }
+  }
+  async function handleVote(yes: boolean) {
+    if (!room) return;
+    try { const r = await castBudgetVote(room.roomId, room.playerToken, yes); setGameState(r.state); setMessage('Vote recorded.'); }
+    catch (e) { setMessage(e instanceof Error ? e.message : 'Could not record vote.'); }
+  }
 
   async function handleStartGame() {
     if (!room) return; setLoading(true); setMessage('');
@@ -243,6 +255,14 @@ const [chatText, setChatText] = useState('');
   <span className="section-kicker">YEAR {gameState.year} OF 3</span><h2>{gameState.phase.toUpperCase()}</h2>
   <p>Game status: {gameState.status}</p>
   {privateInfo && <div className="private-role"><h3>Your private role</h3><p>Ministry: <strong>{privateInfo.ministry}</strong></p><p>Secret: <strong>{privateInfo.isMole ? 'Mole' : 'Cabinet member'}</strong></p><p>{privateInfo.clue}</p></div>}
+  {gameState.phase === 'budget' && <div className="lite-budget">
+    <h3>Draft the ten-coin budget</h3>
+    {(['health','education','security','environment','economy'] as const).map(line => <label key={line} style={{display:'flex',justifyContent:'space-between',gap:12,margin:'8px 0',textTransform:'capitalize'}}>{line}<select value={budgetDraft[line]} onChange={e=>setBudgetDraft(d=>({...d,[line]:Number(e.target.value)}))}>{Array.from({length:11},(_,n)=><option key={n} value={n}>{n} coin{n===1?'':'s'}</option>)}</select></label>)}
+    <p>Coins allocated: {budgetDraft.health+budgetDraft.education+budgetDraft.security+budgetDraft.environment+budgetDraft.economy} / 10</p>
+    <label>Borrowing <select value={budgetDraft.borrowing} onChange={e=>setBudgetDraft(d=>({...d,borrowing:Number(e.target.value) as 0|10|20}))}><option value={0}>0</option><option value={10}>10</option><option value={20}>20</option></select></label>
+    <button className="primary-button" onClick={handleSubmitBudget} disabled={budgetDraft.health+budgetDraft.education+budgetDraft.security+budgetDraft.environment+budgetDraft.economy!==10}>Submit budget</button>
+  </div>}
+  {gameState.phase === 'vote' && <div><h3>Vote on the budget</h3><button className="primary-button" onClick={()=>handleVote(true)}>Approve</button> <button className="secondary-button" onClick={()=>handleVote(false)}>Reject</button><p>Votes cast: {Object.keys(gameState.votes).length}</p></div>}
   <h3>Cabinet seats</h3><ul>{gameState.players.map(p => <li key={p.id}>{p.name}{p.isBot ? ' · AI' : ''} — {p.ministry}</li>)}</ul>
   <button className="secondary-button" onClick={handleReady}>Ready</button>
   <h3>Cabinet chat</h3><ul>{gameState.chat.map(m => <li key={m.at + m.playerId}><strong>{m.name}:</strong> {m.text}</li>)}</ul>
