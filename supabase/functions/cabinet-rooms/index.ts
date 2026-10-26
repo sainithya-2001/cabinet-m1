@@ -230,9 +230,17 @@ export default {
             const resolution=resolveYear(state.country,state.pendingBudget,{revenueTradeModifier:0,interestRate:0.05,crisis});
             next={...state,country:resolution.state,lastPassedBudget:state.pendingBudget,failedVotes:0,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:true,yes,no,resolution},pendingBudget:null,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
           } else if(state.failedVotes===0) {
-            const humans=state.players.filter(p=>!p.isBot);
-            const pm=humans.find(p=>p.id===state.primeMinisterId) ?? humans[0];
-            next={...state,failedVotes:1,primeMinisterId:pm?.id ?? null,phase:"budget",phaseStartedAt:now,phaseDeadline:now+20000,pendingBudget:null,budgetDraft:null,voteChoices:{},votes:{},result:{passed:false,yes,no,redraftBy:pm?.id},version:state.version+1};
+            // A failed first vote hands the redraft to the next seat, including bot seats.
+            const currentIndex=state.players.findIndex(p=>p.id===state.primeMinisterId);
+            const pm=state.players[(currentIndex+1+state.players.length)%state.players.length];
+            if(pm?.isBot) {
+              const draft=botDraft({...state,primeMinisterId:pm.id,failedVotes:1});
+              const budget=liteDraftToBudget(draft);
+              const choices=botVoteChoices(state);
+              next={...state,failedVotes:1,primeMinisterId:pm.id,phase:"vote",phaseStartedAt:now,phaseDeadline:now+(state.year===1?15000:10000),pendingBudget:budget,budgetDraft:draft,voteChoices:choices,votes:choices,result:{passed:false,yes,no,redraftBy:pm.id,botRedraft:true},version:state.version+1};
+            } else {
+              next={...state,failedVotes:1,primeMinisterId:pm?.id ?? null,phase:"budget",phaseStartedAt:now,phaseDeadline:now+20000,pendingBudget:null,budgetDraft:null,voteChoices:{},votes:{},result:{passed:false,yes,no,redraftBy:pm?.id},version:state.version+1};
+            }
           } else {
             const fallback=state.lastPassedBudget ?? {shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment:12},borrowing:0};
             const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
@@ -331,8 +339,18 @@ export default {
           next={...next,country:resolution.state,lastPassedBudget:state.pendingBudget,failedVotes:0,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:now+(state.year===1?15000:10000),result:{passed:true,yes,no,resolution},pendingBudget:null,voteChoices:{},votes:{},budgetDraft:null,version:next.version+1};
           if(resolution.state.collapsed)next={...next,status:"finished",phase:"finished",phaseDeadline:null};
         } else if(state.failedVotes===0) {
-          const pm=humans.find(p=>p.id===state.primeMinisterId) ?? humans[0];
-          next={...next,primeMinisterId:pm?.id ?? null,failedVotes:1,phase:"budget",phaseStartedAt:now,phaseDeadline:now+20000,pendingBudget:null,budgetDraft:null,voteChoices:{},votes:{},result:{passed:false,yes,no,redraftBy:pm?.id},version:next.version+1};
+          // The next seat gets the 20-second redraft; bot PMs draft immediately.
+          const currentIndex=state.players.findIndex(p=>p.id===state.primeMinisterId);
+          const pm=state.players[(currentIndex+1+state.players.length)%state.players.length];
+          if(pm?.isBot) {
+            const redraftState={...state,primeMinisterId:pm.id,failedVotes:1};
+            const draft=botDraft(redraftState);
+            const budget=liteDraftToBudget(draft);
+            const choices=botVoteChoices(state);
+            next={...next,primeMinisterId:pm.id,failedVotes:1,phase:"vote",phaseStartedAt:now,phaseDeadline:now+(state.year===1?15000:10000),pendingBudget:budget,budgetDraft:draft,voteChoices:choices,votes:choices,result:{passed:false,yes,no,redraftBy:pm.id,botRedraft:true},version:next.version+1};
+          } else {
+            next={...next,primeMinisterId:pm?.id ?? null,failedVotes:1,phase:"budget",phaseStartedAt:now,phaseDeadline:now+20000,pendingBudget:null,budgetDraft:null,voteChoices:{},votes:{},result:{passed:false,yes,no,redraftBy:pm?.id},version:next.version+1};
+          }
         } else {
           const fallback=state.lastPassedBudget ?? {shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment:12},borrowing:0};
           const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[crypto.getRandomValues(new Uint32Array(1))[0] % CRISIS_TEMPLATES.length].id,2);
