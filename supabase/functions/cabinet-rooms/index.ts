@@ -186,7 +186,13 @@ export default {
         let status=state.status as LiteState["status"];
         if(state.phase==="result") {
           if(year>=3) { next={...state,phase:"guess",phaseStartedAt:now,phaseDeadline:now+30000,readyByPlayer:{},version:state.version+1}; }
-          else { year++; next={...state,year,phase:"headline",phaseStartedAt:now,phaseDeadline:now+4000,readyByPlayer:{},budgetDraft:null,votes:{},version:state.version+1}; }
+          else {
+            year++;
+            const humans=state.players.filter(p=>!p.isBot);
+            const currentIndex=humans.findIndex(p=>p.id===state.primeMinisterId);
+            const nextPm=humans[(currentIndex+1+humans.length)%humans.length];
+            next={...state,year,primeMinisterId:nextPm?.id ?? humans[0]?.id ?? null,phase:"headline",phaseStartedAt:now,phaseDeadline:now+4000,readyByPlayer:{},budgetDraft:null,votes:{},voteChoices:{},pendingBudget:null,failedVotes:0,version:state.version+1};
+          }
         } else if(state.phase==="guess") {
           status="finished";
           next={...state,status,phase:"finished",phaseStartedAt:now,phaseDeadline:null,version:state.version+1};
@@ -279,7 +285,7 @@ export default {
         const mole=state.players.find(p=>p.isMole);
         const correct=humans.filter(p=>guesses[p.id]===mole?.id).length;
         const incorrect=humans.length-correct;
-        const moleWins=!!mole && (correct<incorrect || (correct===incorrect && !mole.isBot));
+        const moleWins=!!mole && incorrect>correct;
         next={...next,status:"finished",phase:"finished",phaseDeadline:null,result:{outcome:moleWins?"Mole wins":"Cabinet wins",moleName:mole?.name,correctGuesses:correct,incorrectGuesses:incorrect,guesses},version:next.version+1};
       }
       const {error}=await db.from("game_rooms").update({game_state:next,status:next.status}).eq("id",room.id);
