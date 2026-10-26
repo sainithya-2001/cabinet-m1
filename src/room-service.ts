@@ -98,7 +98,7 @@ export type PublicGameState = {
   budgetDraft: Record<string, number> | null; votes: Record<string, boolean>; result: unknown;
   primeMinisterId?: string | null; voteChoices?: Record<string, boolean>; guesses?: Record<string, string>;
   country?: { economy:number; happiness:number; stability:number; environment:number; debt:number; collapsed:boolean; collapseReasons:string[] } | null;
-  lastPassedBudget?: unknown; failedVotes?: number;
+  lastPassedBudget?: unknown; failedVotes?: number; crisisId?: string | null;
 };
 export type PrivateGameInfo = { ministry: string; isMole: boolean; clue: string; playerId?: string };
 async function callGameAction<T>(roomId: string, playerToken: string, action: string, payload?: unknown): Promise<T> {
