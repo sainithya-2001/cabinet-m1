@@ -5,6 +5,8 @@ import {
   joinRoom,
   getRoomPlayers,
   type RoomPlayer,
+  startGame, getGameState, getPrivateGameInfo, markReady, sendRoomChat,
+  type PublicGameState, type PrivateGameInfo,
 } from './room-service.js';
 type RoomInfo = {
   roomCode: string;
@@ -19,6 +21,9 @@ export default function App() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
 const [players, setPlayers] = useState<RoomPlayer[]>([]);
+const [gameState, setGameState] = useState<PublicGameState | null>(null);
+const [privateInfo, setPrivateInfo] = useState<PrivateGameInfo | null>(null);
+const [chatText, setChatText] = useState('');
 
 
   useEffect(() => {
@@ -62,6 +67,37 @@ const [players, setPlayers] = useState<RoomPlayer[]>([]);
     };
   }, [room]);
 
+
+  useEffect(() => {
+    if (!room) { setGameState(null); setPrivateInfo(null); return; }
+    let active = true;
+    async function refreshGame() {
+      try {
+        const [g, p] = await Promise.all([getGameState(room!.roomId, room!.playerToken), getPrivateGameInfo(room!.roomId, room!.playerToken)]);
+        if (active) { setGameState(g.state); setPrivateInfo(p.private); }
+      } catch (error) { if (active) setMessage(error instanceof Error ? error.message : 'Could not refresh game state.'); }
+    }
+    void refreshGame();
+    const id = window.setInterval(() => { void refreshGame(); }, 2000);
+    return () => { active = false; window.clearInterval(id); };
+  }, [room]);
+
+  async function handleStartGame() {
+    if (!room) return; setLoading(true); setMessage('');
+    try { const r = await startGame(room.roomId, room.playerToken); setGameState(r.state); setPrivateInfo(r.private); }
+    catch (e) { setMessage(e instanceof Error ? e.message : 'Could not start game.'); }
+    finally { setLoading(false); }
+  }
+  async function handleReady() {
+    if (!room) return;
+    try { const r = await markReady(room.roomId, room.playerToken); setGameState(r.state); }
+    catch (e) { setMessage(e instanceof Error ? e.message : 'Could not mark ready.'); }
+  }
+  async function handleSendChat() {
+    if (!room) return;
+    try { const r = await sendRoomChat(room.roomId, room.playerToken, chatText); setGameState(r.state); setChatText(''); }
+    catch (e) { setMessage(e instanceof Error ? e.message : 'Could not send message.'); }
+  }
 
   async function handleCreateRoom() {
     if (!playerName.trim()) {
@@ -202,6 +238,16 @@ const [players, setPlayers] = useState<RoomPlayer[]>([]);
                 Copy room code
               </button>
 
+{!gameState && <button className="primary-button" onClick={handleStartGame} disabled={loading}>{loading ? 'Starting…' : 'Start game'}</button>}
+{gameState && <section className="live-game" aria-live="polite">
+  <span className="section-kicker">YEAR {gameState.year} OF 3</span><h2>{gameState.phase.toUpperCase()}</h2>
+  <p>Game status: {gameState.status}</p>
+  {privateInfo && <div className="private-role"><h3>Your private role</h3><p>Ministry: <strong>{privateInfo.ministry}</strong></p><p>Secret: <strong>{privateInfo.isMole ? 'Mole' : 'Cabinet member'}</strong></p><p>{privateInfo.clue}</p></div>}
+  <h3>Cabinet seats</h3><ul>{gameState.players.map(p => <li key={p.id}>{p.name}{p.isBot ? ' · AI' : ''} — {p.ministry}</li>)}</ul>
+  <button className="secondary-button" onClick={handleReady}>Ready</button>
+  <h3>Cabinet chat</h3><ul>{gameState.chat.map(m => <li key={m.at + m.playerId}><strong>{m.name}:</strong> {m.text}</li>)}</ul>
+  {!['vote','result','finished'].includes(gameState.phase) && <div className="join-row"><input value={chatText} maxLength={140} onChange={e=>setChatText(e.target.value)} placeholder="Message (140 characters max)"/><button className="secondary-button" onClick={handleSendChat} disabled={!chatText.trim()}>Send</button></div>}
+</section>}
 <div className="room-players">
   <h3>Players in this room ({players.length})</h3>
   <ul>
