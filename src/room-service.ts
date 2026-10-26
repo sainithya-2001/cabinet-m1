@@ -121,3 +121,11 @@ export async function markReady(roomId: string, playerToken: string) {
 export async function sendRoomChat(roomId: string, playerToken: string, text: string) {
   return callGameAction<{ state: PublicGameState }>(roomId, playerToken, 'chat', { text });
 }
+
+export type LiteBudgetDraft = { health:number; education:number; security:number; environment:number; economy:number; borrowing:0|10|20 };
+export async function submitLiteBudget(roomId:string,playerToken:string,budget:LiteBudgetDraft) {
+  return callGameAction<{state:PublicGameState}>(roomId,playerToken,'budget',budget);
+}
+export async function castBudgetVote(roomId:string,playerToken:string,yes:boolean) {
+  return callGameAction<{state:PublicGameState}>(roomId,playerToken,'vote',{yes});
+}
