@@ -109,6 +109,6 @@ describe('public state privacy', () => {
     expect(serialized).not.toContain('PRIVATE-CLUE-TEST');
     expect(serialized).not.toContain('trueValue');
     expect(serialized).not.toContain('"isMole"');
-    expect(visible.publishedClues).toEqual([{ playerId: 'alice', name: 'alice', ministry: 'Health', year: 1, at: 1 }]);
+    expect(visible.publishedClues).toEqual([{ playerId: 'alice', name: 'alice', ministry: 'Health', value: 110, year: 1, at: 1 }]);
   });
 });
