@@ -177,9 +177,9 @@ const [budgetDraft, setBudgetDraft] = useState({health:2,education:2,security:2,
         </div>
 
         <h1>
-          Every decision
+          Run the country.
           <br />
-          <span>has a consequence.</span>
+          <span>Find the liar.</span>
         </h1>
 
         <p className="hero-copy">
@@ -200,7 +200,7 @@ const [budgetDraft, setBudgetDraft] = useState({health:2,education:2,security:2,
             id="playerName"
             value={playerName}
             onChange={(event) => setPlayerName(event.target.value)}
-            placeholder="What should Parliament call you?"
+            placeholder="Enter your name"
             maxLength={30}
           />
 
@@ -209,7 +209,7 @@ const [budgetDraft, setBudgetDraft] = useState({health:2,education:2,security:2,
             onClick={handleCreateRoom}
             disabled={loading}
           >
-            {loading ? 'Please wait…' : 'Create a game'} <span>→</span>
+            {loading ? 'Please wait…' : 'Play now'} <span>→</span>
           </button>
 
           <div className="join-divider">
