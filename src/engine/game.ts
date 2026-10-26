@@ -1,5 +1,5 @@
 
-import { mulberry32 } from './random.js';
+import { mulberry32 } from './random.ts';
 
 export type GameMode = 'standard' | 'crisis';
 export type GameLength = 'full' | 'quick';
