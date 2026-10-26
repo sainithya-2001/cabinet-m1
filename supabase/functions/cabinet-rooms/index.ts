@@ -258,7 +258,12 @@ export default {
       if(lines.some(k=>!Number.isInteger(draft[k]) || Number(draft[k])<0 || Number(draft[k])>10) || lines.reduce((sum,k)=>sum+Number(draft[k]??0),0)!==10 || ![0,10,20].includes(Number(draft.borrowing))) return jsonResponse({error:"Allocate exactly ten whole coins and choose borrowing 0, 10 or 20."},400);
       const shares={health:Number(draft.health)*10,education:Number(draft.education)*10,security:Number(draft.security)*10,environment:Number(draft.environment)*10,infrastructure:Number(draft.economy)*5,industry:Number(draft.economy)*5,debtRepayment:0};
       const budget:Budget={shares,borrowing:Number(draft.borrowing)};
-      const next={...state,budgetDraft:draft,pendingBudget:budget,phase:"vote",phaseStartedAt:Date.now(),phaseDeadline:Date.now()+(state.year===1?15000:10000),votes:{},voteChoices:{},readyByPlayer:{},version:state.version+1};
+      const botChoices:Record<string,boolean>={};
+      for (const bot of state.players.filter(p=>p.isBot)) {
+        // Precompute each bot's vote when the phase opens; no vote changes during the phase.
+        botChoices[bot.id]=crypto.getRandomValues(new Uint32Array(1))[0] % 100 < (bot.isMole ? 35 : 70);
+      }
+      const next={...state,budgetDraft:draft,pendingBudget:budget,phase:"vote",phaseStartedAt:Date.now(),phaseDeadline:Date.now()+(state.year===1?15000:10000),votes:botChoices,voteChoices:botChoices,readyByPlayer:{},version:state.version+1};
       const {error}=await db.from("game_rooms").update({game_state:next}).eq("id",room.id).eq("status","playing");
       if(error)return jsonResponse({error:"Could not submit budget."},500);
       return jsonResponse({state:publicState(next)});
