@@ -69,6 +69,42 @@ async function findPlayer(db: Db, roomId: string, token: string) {
   if (!player) throw new Error("Invalid player token.");
   return player as PlayerRow;
 }
+function liteDraftToBudget(draft: Record<string, number>): Budget {
+  return {
+    shares: {
+      health: draft.health * 10,
+      education: draft.education * 10,
+      security: draft.security * 10,
+      environment: draft.environment * 10,
+      infrastructure: draft.economy * 5,
+      industry: draft.economy * 5,
+      debtRepayment: 0,
+    },
+    borrowing: draft.borrowing,
+  };
+}
+function botDraft(state: LiteState): Record<string, number> {
+  const pm = state.players.find((p) => p.id === state.primeMinisterId);
+  // A Mole PM favours growth at the expense of public services and takes maximum debt.
+  if (pm?.isMole) return { health: 1, education: 1, security: 1, environment: 1, economy: 6, borrowing: 20 };
+  // Ordinary bot PMs use a balanced cabinet budget, with a small crisis-aware adjustment.
+  const draft = { health: 2, education: 2, security: 2, environment: 2, economy: 2, borrowing: 0 };
+  const crisis = state.crisisId;
+  if (crisis === "outbreak") { draft.health++; draft.economy--; }
+  else if (crisis === "border-tension" || crisis === "cyberattack" || crisis === "protests") { draft.security++; draft.economy--; }
+  else if (crisis === "floods" || crisis === "heatwave") { draft.environment++; draft.economy--; }
+  else if (crisis === "teacher-strike") { draft.education++; draft.economy--; }
+  else if (crisis === "recession" || crisis === "energy-price-spike") { draft.economy++; draft.health--; }
+  return draft;
+}
+function botVoteChoices(state: LiteState): Record<string, boolean> {
+  const choices: Record<string, boolean> = {};
+  for (const bot of state.players.filter((p) => p.isBot)) {
+    // Keep the Mole's voting less predictable while making cabinet bots usually supportive.
+    choices[bot.id] = crypto.getRandomValues(new Uint32Array(1))[0] % 100 < (bot.isMole ? 35 : 70);
+  }
+  return choices;
+}
 function initialLiteState(players: PlayerRow[]): LiteState {
   if (players.length < 2 || players.length > 6) throw new Error("Cabinet Lite requires 2–6 human players to start.");
   const seatRows = shuffle(players.map((p) => ({ row: p, isBot: false })));
@@ -209,14 +245,20 @@ export default {
           const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
           const resolution=resolveYear(state.country ?? createInitialState(),fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true});
           next={...state,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:false,shutdown:true,reason:"Budget deadline expired",resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
+        } else if(state.phase==="clue" && state.players.find(p=>p.id===state.primeMinisterId)?.isBot) {
+          // Bot PMs draft automatically; they must not trigger a fake missed-deadline shutdown.
+          const draft=botDraft(state);
+          const budget=liteDraftToBudget(draft);
+          const choices=botVoteChoices(state);
+          next={...state,budgetDraft:draft,pendingBudget:budget,phase:"vote",phaseStartedAt:now,phaseDeadline:now+(state.year===1?15000:10000),votes:choices,voteChoices:choices,readyByPlayer:{},version:state.version+1};
         } else if(state.phase==="result") {
           if(year>=3) { next={...state,phase:"guess",phaseStartedAt:now,phaseDeadline:now+30000,readyByPlayer:{},version:state.version+1}; }
           else {
             year++;
-            const humans=state.players.filter(p=>!p.isBot);
-            const currentIndex=humans.findIndex(p=>p.id===state.primeMinisterId);
-            const nextPm=humans[(currentIndex+1+humans.length)%humans.length];
-            next={...state,year,primeMinisterId:nextPm?.id ?? humans[0]?.id ?? null,phase:"headline",phaseStartedAt:now,phaseDeadline:now+4000,readyByPlayer:{},budgetDraft:null,votes:{},voteChoices:{},pendingBudget:null,failedVotes:0,version:state.version+1};
+            // PM rotation follows the ordered seats: all humans get their turn before bots.
+            const currentIndex=state.players.findIndex(p=>p.id===state.primeMinisterId);
+            const nextPm=state.players[(currentIndex+1+state.players.length)%state.players.length];
+            next={...state,year,primeMinisterId:nextPm?.id ?? state.players[0]?.id ?? null,phase:"headline",phaseStartedAt:now,phaseDeadline:now+4000,readyByPlayer:{},budgetDraft:null,votes:{},voteChoices:{},pendingBudget:null,failedVotes:0,version:state.version+1};
           }
         } else if(state.phase==="guess") {
           status="finished";
@@ -256,14 +298,14 @@ export default {
       const draft=payload as Record<string,unknown>;
       const lines=["health","education","security","environment","economy"];
       if(lines.some(k=>!Number.isInteger(draft[k]) || Number(draft[k])<0 || Number(draft[k])>10) || lines.reduce((sum,k)=>sum+Number(draft[k]??0),0)!==10 || ![0,10,20].includes(Number(draft.borrowing))) return jsonResponse({error:"Allocate exactly ten whole coins and choose borrowing 0, 10 or 20."},400);
-      const shares={health:Number(draft.health)*10,education:Number(draft.education)*10,security:Number(draft.security)*10,environment:Number(draft.environment)*10,infrastructure:Number(draft.economy)*5,industry:Number(draft.economy)*5,debtRepayment:0};
-      const budget:Budget={shares,borrowing:Number(draft.borrowing)};
-      const botChoices:Record<string,boolean>={};
-      for (const bot of state.players.filter(p=>p.isBot)) {
-        // Precompute each bot's vote when the phase opens; no vote changes during the phase.
-        botChoices[bot.id]=crypto.getRandomValues(new Uint32Array(1))[0] % 100 < (bot.isMole ? 35 : 70);
-      }
-      const next={...state,budgetDraft:draft,pendingBudget:budget,phase:"vote",phaseStartedAt:Date.now(),phaseDeadline:Date.now()+(state.year===1?15000:10000),votes:botChoices,voteChoices:botChoices,readyByPlayer:{},version:state.version+1};
+      const normalizedDraft: Record<string, number> = {
+        health: Number(draft.health), education: Number(draft.education), security: Number(draft.security),
+        environment: Number(draft.environment), economy: Number(draft.economy), borrowing: Number(draft.borrowing),
+      };
+      const budget=liteDraftToBudget(normalizedDraft);
+      // Bot votes are fixed when voting opens and cannot change later.
+      const botChoices=botVoteChoices(state);
+      const next={...state,budgetDraft:normalizedDraft,pendingBudget:budget,phase:"vote",phaseStartedAt:Date.now(),phaseDeadline:Date.now()+(state.year===1?15000:10000),votes:botChoices,voteChoices:botChoices,readyByPlayer:{},version:state.version+1};
       const {error}=await db.from("game_rooms").update({game_state:next}).eq("id",room.id).eq("status","playing");
       if(error)return jsonResponse({error:"Could not submit budget."},500);
       return jsonResponse({state:publicState(next)});
