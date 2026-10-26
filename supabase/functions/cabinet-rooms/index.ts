@@ -177,7 +177,7 @@ export default {
       const playerToken = randomToken(), tokenHash = await hashToken(playerToken);
       for (let attempt = 0; attempt < 5; attempt++) {
         const roomCode = generateRoomCode();
-        const { data: room, error } = await db.from("game_rooms").insert({room_code: roomCode,host_name: playerName,host_token_hash: tokenHash,game_state: {},status:"waiting"}).select("id").single();
+        const { data: room, error } = await db.from("game_rooms").insert({room_code: roomCode,host_name: playerName,host_token_hash: tokenHash,game_state: { version: 0 },status:"waiting"}).select("id").single();
         if (error || !room) {
           if (error?.code === "23505") continue;
           console.error("Room creation failed:", error?.message);
@@ -230,13 +230,14 @@ export default {
       try {
         const initial=initialLiteState((rows??[]) as PlayerRow[]);
         const saved=await mutateGameState(db,room.id,(latest,roomStatus)=>{
-          if(roomStatus!=="waiting" || (latest && Object.keys(latest).length>0))throw new Error("This game has already started.");
+          if(roomStatus!=="waiting" || (latest && (latest.version!==0 || Object.keys(latest).some(k=>k!=="version"))))throw new Error("This game has already started.");
           return {state:initial,status:"playing"};
         });
         return jsonResponse({state:publicState(saved.state),private:{...saved.state.privateByPlayer[player.id],playerId:player.id}});
       }catch(e){return jsonResponse({error:e instanceof Error?e.message:"Could not start game."},409);}
     }
     if(body.action==="state") {
+      if (room.status === "waiting") return jsonResponse({state:null,status:"waiting"});
       try {
         const saved = await mutateGameState(db, room.id, (state, roomStatus) => {
           if (!state) throw new Error("The game has not started.");
