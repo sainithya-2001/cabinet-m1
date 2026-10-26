@@ -242,3 +242,5 @@ footer { max-width:1180px; margin:auto; padding:18px 24px; display:flex; justify
 .indicator-breakdown h4,.indicator-breakdown p { margin:4px 0; }
 @media(max-width:999px) { .indicator-breakdown { grid-template-columns:1fr; gap:2px; } }
 @media(max-width:600px) { .app-shell.in-game { padding-left:8px; padding-right:8px; } .live-game { display:flex; flex-direction:column; width:100%; min-width:0; } .phase-action-panel { width:100%; min-width:0; } .times-table { min-width:600px; } }
+
+.speaker-phase-row{display:grid;grid-template-columns:minmax(260px,1fr) minmax(260px,1fr);align-items:center;gap:18px;grid-column:1/-1}.speaker-phase-row .speaker-banner{justify-content:flex-start}.speaker-phase-row .phase-status{border:0;padding:10px}@media(min-width:1000px){.live-game>.speaker-phase-row{grid-column:1/-1;grid-row:3}.live-game>.phase-action-panel{grid-column:1/-1;grid-row:4}.live-game>.chamber-scene,.live-game>.chamber-chat{grid-row:5}}@media(max-width:999px){.speaker-phase-row{display:flex;flex-direction:column;align-items:stretch;gap:0}.speaker-phase-row .speaker-banner{justify-content:flex-start}}
