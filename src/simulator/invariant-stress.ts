@@ -5,7 +5,7 @@ import {
   makeCrisis,
   mulberry32,
   resolveYear,
-} from '../engine/index.js';
+} from '../engine/index.ts';
 
 const CASES = 100_000;
 
