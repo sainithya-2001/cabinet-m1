@@ -13,6 +13,10 @@ export const LITE_BUDGET_LINES: readonly LiteBudgetLine[] = [
   'economy',
 ] as const;
 
+export function fallbackLiteDraft(): LiteBudgetDraft {
+  return { health: 2, education: 2, security: 2, environment: 2, economy: 2, borrowing: 0 };
+}
+
 export const LITE_YEARS = 3;
 export const LITE_MIN_SEATS = 5;
 export const LITE_MAX_HUMANS = 6;

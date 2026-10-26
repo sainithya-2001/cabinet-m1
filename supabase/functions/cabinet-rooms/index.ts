@@ -1,6 +1,7 @@
 import { calculateYearFinances, createInitialState, defaultBudget, resolveYear, sectorNeeds } from "../../../src/engine/economy.ts";
 import { makeCrisis, CRISIS_TEMPLATES } from "../../../src/engine/crises.ts";
 import type { Budget, CountryState, YearInputs } from "../../../src/engine/types.ts";
+import { fallbackLiteDraft, toEngineBudget, validateLiteBudget, type LiteBudgetDraft } from "../../../src/engine/lite-budget.ts";
 import { mutateVersionedState } from "../../../src/engine/versioned-mutation.ts";
 import { toPublicGameState, type GamePlayer, type PublishedClue } from "../../../src/engine/public-game-state.ts";
 import { withSupabase } from "@supabase/server";
@@ -98,18 +99,12 @@ async function findPlayer(db: Db, roomId: string, token: string) {
   return player as PlayerRow;
 }
 function liteDraftToBudget(draft: Record<string, number>): Budget {
-  return {
-    shares: {
-      health: draft.health * 10,
-      education: draft.education * 10,
-      security: draft.security * 10,
-      environment: draft.environment * 10,
-      infrastructure: draft.economy * 5,
-      industry: draft.economy * 5,
-      debtRepayment: 0,
-    },
-    borrowing: draft.borrowing,
-  };
+  const errors = validateLiteBudget(draft as LiteBudgetDraft);
+  if (errors.length) throw new Error(errors.join(" "));
+  return toEngineBudget(draft as LiteBudgetDraft);
+}
+function fallbackEngineBudget(): Budget {
+  return toEngineBudget(fallbackLiteDraft());
 }
 function botDraft(state: LiteState): Record<string, number> {
   const pm = state.players.find((p) => p.id === state.primeMinisterId);
@@ -296,14 +291,16 @@ export default {
                         next={...state,failedVotes:1,primeMinisterId:pm?.id ?? null,phase:"budget",phaseStartedAt:now,phaseDeadline:now+20000,pendingBudget:null,budgetDraft:null,voteChoices:{},votes:{},result:{passed:false,yes,no,redraftBy:pm?.id},version:state.version+1};
                       }
                     } else {
-                      const fallback=state.lastPassedBudget ?? {shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment:0},borrowing:0};
+                      const fallback=state.lastPassedBudget ?? fallbackEngineBudget();
                       const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
                       const resolution=resolveYear(state.country,fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true});
                       next={...state,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:false,shutdown:true,yes,no,resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
                     }
                   } else if(state.phase==="budget") {
                     // A PM who misses the drafting deadline triggers the same fallback path as a failed vote.
-                    const fallback=state.lastPassedBudget ?? {shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment: 0},borrowing:0};
+                    const currentDraft = state.budgetDraft;
+                    const usableDraft = currentDraft && validateLiteBudget(currentDraft as LiteBudgetDraft).length === 0 ? currentDraft : fallbackLiteDraft();
+                    const fallback = state.lastPassedBudget ?? liteDraftToBudget(usableDraft);
                     const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
                     const resolution=resolveYear(state.country ?? createInitialState(),fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true});
                     next={...state,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:false,shutdown:true,reason:"Budget deadline expired",resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
@@ -344,7 +341,14 @@ export default {
           return {state:next,status:next.status,changed:true};
         });
         return jsonResponse({state:publicState(saved.state),status:saved.status});
-      } catch(e) { return jsonResponse({error:e instanceof Error?e.message:"Could not advance game phase."},409); }
+      } catch(e) {
+        const message = e instanceof Error ? e.message : "Could not advance game phase.";
+        console.error("Automatic phase transition failed; preserving current game state:", message);
+        const { data: current, error: reloadError } = await db.from("game_rooms").select("game_state,status").eq("id", room.id).maybeSingle();
+        if (reloadError) console.error("Could not reload state after failed automatic transition:", reloadError.message);
+        const currentState = current?.game_state as LiteState | null;
+        return jsonResponse({ state: currentState ? publicState(currentState) : state ? publicState(state) : null, status: current?.status ?? room.status, transitionError: message }, 200);
+      }
     }
     if(body.action==="publish-clue") {
       const payload=body.payload as Record<string,unknown>|undefined;
