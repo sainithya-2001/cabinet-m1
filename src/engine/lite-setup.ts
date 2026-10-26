@@ -67,7 +67,6 @@ export function createLiteGameSetup(
 
   const base = createGameSetup(seed, namesForEngine, 'standard', 'quick');
   const rng = mulberry32(seed ^ 0x4c495445);
-  const shuffledHumans = [...humanSeats].sort(() => rng() - 0.5);
   const humanIdsByEngineId = new Map<string, string>();
   humanSeats.forEach((human, index) => humanIdsByEngineId.set(`player-${index + 1}`, human.id));
 
@@ -83,7 +82,6 @@ export function createLiteGameSetup(
     .filter((player) => !humanIdsByEngineId.has(player.id))
     .map((player) => ({ ...player, name: namesById.get(player.id) ?? player.name }));
 
-  const ordered = [...humanPlayers, ...botPlayers].map((player, seat) => ({ ...player, seat }));
   const firstHuman = Math.floor(rng() * humanPlayers.length);
   const rotatedHumans = [
     ...humanPlayers.slice(firstHuman),
