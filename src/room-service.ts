@@ -129,3 +129,7 @@ export async function submitLiteBudget(roomId:string,playerToken:string,budget:L
 export async function castBudgetVote(roomId:string,playerToken:string,yes:boolean) {
   return callGameAction<{state:PublicGameState}>(roomId,playerToken,'vote',{yes});
 }
+
+export async function submitMoleGuess(roomId:string,playerToken:string,playerId:string) {
+  return callGameAction<{state:PublicGameState}>(roomId,playerToken,'guess',{playerId});
+}
