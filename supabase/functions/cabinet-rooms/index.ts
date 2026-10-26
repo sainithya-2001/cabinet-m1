@@ -24,6 +24,9 @@ type LiteState = {
   voteChoices: Record<string, boolean>;
   crisisId: string | null;
   yearResolution: unknown;
+  primeMinisterId: string | null;
+  guesses: Record<string, string>;
+  botPlan: Record<string, unknown>;
 };
 function jsonResponse(body: Record<string, unknown>, status = 200): Response { return Response.json(body, { status }); }
 function randomToken(): string {
@@ -94,7 +97,8 @@ function initialLiteState(players: PlayerRow[]): LiteState {
     players: ordered, privateByPlayer, readyByPlayer: {}, chat: [],
     budgetDraft: null, votes: {}, result: null, lastActionAt: {},
     country: createInitialState(), lastPassedBudget: null, failedVotes: 0,
-    pendingBudget: null, voteChoices: {}, crisisId: null, yearResolution: null,
+    pendingBudget: null, voteChoices: {}, crisisId: CRISIS_TEMPLATES[crypto.getRandomValues(new Uint32Array(1))[0] % CRISIS_TEMPLATES.length].id, yearResolution: null,
+    primeMinisterId: ordered.find(p => !p.isBot)?.id ?? null, guesses: {}, botPlan: {},
   };
 }
 export default {
@@ -210,8 +214,7 @@ export default {
     if(body.action==="budget") {
       if(!state || state.status!=="playing") return jsonResponse({error:"The game has not started."},409);
       if(state.phase!=="budget") return jsonResponse({error:"Budget drafts are only accepted during the budget phase."},409);
-      const currentPm=state.players.find(p=>!p.isBot && p.id===player.id);
-      if(!currentPm) return jsonResponse({error:"Only human ministers can submit this action."},403);
+      if(state.primeMinisterId !== player.id) return jsonResponse({error:"Only the current Prime Minister can submit the budget."},403);
       if(!state.players.filter(p=>!p.isBot).length) return jsonResponse({error:"No human ministers found."},409);
       const payload=body.payload as Record<string,unknown>|undefined;
       if(!payload || typeof payload!=="object") return jsonResponse({error:"Budget payload is required."},400);
@@ -239,7 +242,7 @@ export default {
         const yes=Object.values(voteChoices).filter(Boolean).length;
         const no=Object.values(voteChoices).filter(v=>!v).length;
         if(yes>no) {
-          const crisisId=state.crisisId ?? CRISIS_TEMPLATES[0].id;
+          const crisisId=state.crisisId ?? CRISIS_TEMPLATES[crypto.getRandomValues(new Uint32Array(1))[0] % CRISIS_TEMPLATES.length].id;
           const crisis=makeCrisis(crisisId,2);
           const inputs:YearInputs={revenueTradeModifier:0,interestRate:0.05,crisis};
           const resolution=resolveYear(state.country,state.pendingBudget,inputs);
@@ -250,7 +253,7 @@ export default {
           next={...next,failedVotes:1,phase:"budget",phaseStartedAt:now,phaseDeadline:now+20000,pendingBudget:null,budgetDraft:null,voteChoices:{},votes:{},result:{passed:false,yes,no,redraftBy:pm?.id},version:next.version+1};
         } else {
           const fallback=state.lastPassedBudget ?? {shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment:12},borrowing:0};
-          const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
+          const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[crypto.getRandomValues(new Uint32Array(1))[0] % CRISIS_TEMPLATES.length].id,2);
           const resolution=resolveYear(state.country,fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true});
           next={...next,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:now+(state.year===1?15000:10000),result:{passed:false,shutdown:true,yes,no,resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null,version:next.version+1};
           if(resolution.state.collapsed)next={...next,status:"finished",phase:"finished",phaseDeadline:null};
@@ -258,6 +261,29 @@ export default {
       }
       const {error}=await db.from("game_rooms").update({game_state:next,status:next.status}).eq("id",room.id);
       if(error)return jsonResponse({error:"Could not save vote."},500);
+      return jsonResponse({state:publicState(next)});
+    }
+    if(body.action==="guess") {
+      if(!state || state.status!=="playing" || state.phase!=="guess") return jsonResponse({error:"Mole guesses are only open at the end of Year 3."},409);
+      const payload=body.payload as Record<string,unknown>|undefined;
+      if(typeof payload?.playerId!=="string")return jsonResponse({error:"Choose a player to accuse."},400);
+      const target=state.players.find(p=>p.id===payload.playerId && !p.isBot);
+      if(!target)return jsonResponse({error:"Choose a human player."},400);
+      if(state.guesses[player.id])return jsonResponse({error:"You have already guessed."},409);
+      const guesses={...state.guesses,[player.id]:target.id};
+      const humans=state.players.filter(p=>!p.isBot);
+      const allGuessed=humans.every(p=>guesses[p.id]);
+      const now=Date.now();
+      let next={...state,guesses,version:state.version+1};
+      if(allGuessed || (state.phaseDeadline!==null && now>=state.phaseDeadline)) {
+        const mole=state.players.find(p=>p.isMole);
+        const correct=humans.filter(p=>guesses[p.id]===mole?.id).length;
+        const incorrect=humans.length-correct;
+        const moleWins=!!mole && (correct<incorrect || (correct===incorrect && !mole.isBot));
+        next={...next,status:"finished",phase:"finished",phaseDeadline:null,result:{outcome:moleWins?"Mole wins":"Cabinet wins",moleName:mole?.name,correctGuesses:correct,incorrectGuesses:incorrect,guesses},version:next.version+1};
+      }
+      const {error}=await db.from("game_rooms").update({game_state:next,status:next.status}).eq("id",room.id);
+      if(error)return jsonResponse({error:"Could not save Mole guess."},500);
       return jsonResponse({state:publicState(next)});
     }
     if(body.action==="chat") {
