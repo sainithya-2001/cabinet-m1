@@ -100,7 +100,7 @@ export type PublicGameState = {
   country?: { economy:number; happiness:number; stability:number; environment:number; debt:number; collapsed:boolean; collapseReasons:string[] } | null;
   lastPassedBudget?: unknown; failedVotes?: number;
 };
-export type PrivateGameInfo = { ministry: string; isMole: boolean; clue: string };
+export type PrivateGameInfo = { ministry: string; isMole: boolean; clue: string; playerId?: string };
 async function callGameAction<T>(roomId: string, playerToken: string, action: string, payload?: unknown): Promise<T> {
   const { data, error } = await supabase.functions.invoke('cabinet-rooms', {
     body: { action, roomId, playerToken, ...(payload === undefined ? {} : { payload }) },
