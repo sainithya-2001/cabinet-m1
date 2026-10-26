@@ -199,7 +199,7 @@ const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.c
         </h1>
 
         <p className="hero-copy">
-          Cabinet: Run the country. Find the liar.
+          A satirical cabinet crisis game. Make the numbers add up. Decide who is telling the truth.
         </p>
 
         <div className="game-panel">
@@ -271,7 +271,7 @@ const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.c
                   setMessage('Invite link copied. Friends only need to enter their name.');
                 }}
               >
-                Copy room code
+                Copy invite link
               </button>
 
 {!gameState && <button className="primary-button" onClick={handleStartGame} disabled={loading}>{loading ? 'Starting…' : 'Start game'}</button>}
@@ -298,7 +298,7 @@ const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.c
   <h3>Cabinet chat</h3><ul>{gameState.chat.map(m => <li key={m.at + m.playerId}><strong>{m.name}:</strong> {m.text}</li>)}</ul>
   {!['vote','result','finished'].includes(gameState.phase) && <div className="join-row"><input value={chatText} maxLength={140} onChange={e=>setChatText(e.target.value)} placeholder="Message (140 characters max)"/><button className="secondary-button" onClick={handleSendChat} disabled={!chatText.trim()}>Send</button></div>}
 </section>}
-{showRules && <div className="rules-backdrop" role="presentation" onClick={() => setShowRules(false)}><section className="rules-modal" role="dialog" aria-modal="true" aria-labelledby="rules-title" onClick={event => event.stopPropagation()}><button className="rules-close" onClick={() => setShowRules(false)} aria-label="Close rules">×</button><span className="section-kicker">THE RULES OF VELORIA</span><h2 id="rules-title">Three steps to government</h2><ol className="rules-list"><li><strong>Get a secret clue.</strong><p>A crisis hits. Only you know one number, and you can tell the truth or lie.</p></li><li><strong>Argue, then vote.</strong><p>The Prime Minister splits 10 budget coins, and the cabinet votes yes or no.</p></li><li><strong>Survive and unmask.</strong><p>Keep Veloria alive for 3 years, then name the Mole.</p></li></ol><p className="helper-text">Refreshing reconnects you.</p></section></div>}
+
 <div className="room-players">
   <h3>Players in this room ({players.length})</h3>
   <ul>
@@ -326,6 +326,8 @@ const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.c
         </div>
         <p className="refresh-note">Refreshing reconnects you.</p>
       </section>
+
+      {showRules && <div className="rules-backdrop" role="presentation" onClick={() => setShowRules(false)}><section className="rules-modal" role="dialog" aria-modal="true" aria-labelledby="rules-title" onClick={event => event.stopPropagation()}><button className="rules-close" onClick={() => setShowRules(false)} aria-label="Close rules">×</button><span className="section-kicker">THE RULES OF VELORIA</span><h2 id="rules-title">Three steps to government</h2><ol className="rules-list"><li><strong>Get a secret clue.</strong><p>A crisis hits. Only you know one number, and you can tell the truth or lie.</p></li><li><strong>Argue, then vote.</strong><p>The Prime Minister splits 10 budget coins, and the cabinet votes yes or no.</p></li><li><strong>Survive and unmask.</strong><p>Keep Veloria alive for 3 years, then name the Mole.</p></li></ol><p className="helper-text">Refreshing reconnects you.</p></section></div>}
 
       <footer>
         <span>CABINET © 2026</span>
