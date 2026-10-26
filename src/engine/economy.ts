@@ -1,5 +1,5 @@
-import { collapseReasons, PARAMETERS, SECTORS } from './parameters.js';
-import type { Budget, CauseLine, CountryState, Indicator, IndicatorResolution, Sector, YearInputs, YearResolution } from './types.js';
+import { collapseReasons, PARAMETERS, SECTORS } from './parameters.ts';
+import type { Budget, CauseLine, CountryState, Indicator, IndicatorResolution, Sector, YearInputs, YearResolution } from './types.ts';
 
 const round = (n: number) => Math.round(n);
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
