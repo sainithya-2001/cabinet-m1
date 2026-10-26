@@ -111,8 +111,10 @@ function initialLiteState(players: PlayerRow[]): LiteState {
   const botNames = ["Ada", "Boris", "Cleo", "Dmitri", "Elsie", "Felix"];
   while (seatRows.length < 5) seatRows.push({ row: { id: "bot-" + (seatRows.length + 1), player_name: botNames[seatRows.length] ?? "Bot", joined_at: new Date().toISOString(), player_token_hash: "" }, isBot: true });
   const ministries = shuffle(["Finance", "Health", "Defense", "Education", "Environment", "Economy", "Infrastructure", "Intelligence"]).slice(0, seatRows.length);
-  const moleIndex = crypto.getRandomValues(new Uint32Array(1))[0] % seatRows.length;
+  // The Mole must be a human seat: final accusations are made by humans and
+  // should never become unwinnable because the hidden role landed on an AI bot.
   const humanCount = players.length;
+  const moleIndex = crypto.getRandomValues(new Uint32Array(1))[0] % humanCount;
   const gamePlayers: GamePlayer[] = seatRows.map((item, seat) => ({
     id: item.row.id, name: item.row.player_name, seat, isBot: item.isBot,
     ministry: ministries[seat], isMole: seat === moleIndex, ready: false,
