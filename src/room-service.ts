@@ -94,7 +94,6 @@ export type PublicGameState = {
   version: number; status: 'waiting' | 'playing' | 'finished'; createdAt: number;
   phase: string; phaseStartedAt: number; phaseDeadline: number | null; year: number;
   players: PublicGamePlayer[];
-  chat: Array<{ playerId: string; name: string; text: string; at: number }>;
   budgetDraft: Record<string, number> | null; votes: Record<string, boolean>; result: unknown;
   primeMinisterId?: string | null; voteChoices?: Record<string, boolean>; guesses?: Record<string, string>;
   country?: { economy:number; happiness:number; stability:number; environment:number; debt:number; collapsed:boolean; collapseReasons:string[] } | null;
@@ -121,8 +120,18 @@ export async function getPrivateGameInfo(roomId: string, playerToken: string) {
 export async function markReady(roomId: string, playerToken: string) {
   return callGameAction<{ state: PublicGameState }>(roomId, playerToken, 'ready');
 }
+export type RoomChatMessage = { playerId: string; name: string; text: string; at: number };
 export async function sendRoomChat(roomId: string, playerToken: string, text: string) {
-  return callGameAction<{ state: PublicGameState }>(roomId, playerToken, 'chat', { text });
+  return callGameAction<{ message: RoomChatMessage }>(roomId, playerToken, 'chat', { text });
+}
+export function subscribeRoomChat(roomId: string, onMessage: (message: RoomChatMessage) => void) {
+  const channel = supabase.channel('cabinet-chat:' + roomId);
+  channel.on('broadcast', { event: 'chat-message' }, ({ payload }) => {
+    if (payload && typeof payload.playerId === 'string' && typeof payload.name === 'string' && typeof payload.text === 'string' && typeof payload.at === 'number') {
+      onMessage(payload as RoomChatMessage);
+    }
+  }).subscribe();
+  return () => { void supabase.removeChannel(channel); };
 }
 
 export type LiteBudgetDraft = { health:number; education:number; security:number; environment:number; economy:number; borrowing:0|10|20 };
