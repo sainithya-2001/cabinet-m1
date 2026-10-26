@@ -1,12 +1,12 @@
 
 
-import type { GameFlow } from './game-flow.js';
-import type { YearInputs } from './types.js';
-import type { Budget } from './types.js';
-import type { MinistryPower } from './ministry-powers.js';
-import { PARAMETERS } from './parameters.js';
-import { validateBudget } from './economy.js';
-import { validateMinistryPower } from './ministry-powers.js';
+import type { GameFlow } from './game-flow.ts';
+import type { YearInputs } from './types.ts';
+import type { Budget } from './types.ts';
+import type { MinistryPower } from './ministry-powers.ts';
+import { PARAMETERS } from './parameters.ts';
+import { validateBudget } from './economy.ts';
+import { validateMinistryPower } from './ministry-powers.ts';
 
 export interface PowerEffectResult {
   flow: GameFlow;
