@@ -1,4 +1,4 @@
-import type { CountryState, Indicator, DelayedEffect } from './types.js';
+import type { CountryState, Indicator, DelayedEffect } from './types.ts';
 
 export type GamePlayer = { id: string; name: string; seat: number; isBot: boolean; ministry: string; isMole: boolean; ready: boolean };
 export type PublishedClue = { playerId: string; name: string; ministry: string; value: number; year: number; at: number };
