@@ -7,7 +7,7 @@ import {
   getRoomPlayers,
   type RoomPlayer,
   startGame, getGameState, getPrivateGameInfo, markReady, sendRoomChat, submitLiteBudget, castBudgetVote, submitMoleGuess,
-  type PublicGameState, type PrivateGameInfo,
+  type PublicGameState, type PrivateGameInfo, type RoomChatMessage, subscribeRoomChat,
 } from './room-service.js';
 type RoomInfo = {
   roomCode: string;
@@ -25,6 +25,7 @@ const [players, setPlayers] = useState<RoomPlayer[]>([]);
 const [gameState, setGameState] = useState<PublicGameState | null>(null);
 const [privateInfo, setPrivateInfo] = useState<PrivateGameInfo | null>(null);
 const [chatText, setChatText] = useState('');
+const [chatMessages, setChatMessages] = useState<RoomChatMessage[]>([]);
 const [budgetDraft, setBudgetDraft] = useState({health:2,education:2,security:2,environment:2,economy:2,borrowing:0 as 0|10|20});
 const [showRules, setShowRules] = useState(false);
 const [clockNow, setClockNow] = useState(Date.now());
@@ -87,6 +88,14 @@ const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.c
 
 
   useEffect(() => {
+    setChatMessages([]);
+    if (!room) return;
+    return subscribeRoomChat(room.roomId, message => {
+      setChatMessages(current => [...current, message].slice(-100));
+    });
+  }, [room]);
+
+  useEffect(() => {
     if (!room) { setGameState(null); setPrivateInfo(null); return; }
     let active = true;
     async function refreshGame() {
@@ -130,7 +139,7 @@ const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.c
   }
   async function handleSendChat() {
     if (!room) return;
-    try { const r = await sendRoomChat(room.roomId, room.playerToken, chatText); setGameState(r.state); setChatText(''); }
+    try { const r = await sendRoomChat(room.roomId, room.playerToken, chatText); setChatMessages(current => [...current, r.message].slice(-100)); setChatText(''); }
     catch (e) { setMessage(e instanceof Error ? e.message : 'Could not send message.'); }
   }
 
@@ -295,7 +304,7 @@ const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.c
   {gameState.phase === 'vote' && <div><h3>Vote on the budget</h3>{gameState.voteChoices?.[privateInfo?.playerId ?? ''] !== undefined ? <p>Your vote is recorded.</p> : <><button className="primary-button" onClick={()=>handleVote(true)}>Approve</button> <button className="secondary-button" onClick={()=>handleVote(false)}>Reject</button></>}<p>Votes cast: {Object.keys(gameState.votes).length}</p></div>}
   <h3>Cabinet seats</h3><ul>{gameState.players.map(p => <li key={p.id}>{p.name}{p.isBot ? ' · AI' : ''} — {p.ministry}</li>)}</ul>
   <button className="secondary-button ready-button" onClick={handleReady}>Ready — move on when everyone is ready</button>
-  <h3>Cabinet chat</h3><ul>{gameState.chat.map(m => <li key={m.at + m.playerId}><strong>{m.name}:</strong> {m.text}</li>)}</ul>
+  <h3>Cabinet chat</h3><ul>{chatMessages.map((m, index) => <li key={m.at + m.playerId + index}><strong>{m.name}:</strong> {m.text}</li>)}</ul>
   {!['vote','result','finished'].includes(gameState.phase) && <div className="join-row"><input value={chatText} maxLength={140} onChange={e=>setChatText(e.target.value)} placeholder="Message (140 characters max)"/><button className="secondary-button" onClick={handleSendChat} disabled={!chatText.trim()}>Send</button></div>}
 </section>}
 
