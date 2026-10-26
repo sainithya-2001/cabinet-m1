@@ -1,5 +1,5 @@
-import { createGameSetup, type GameSetup } from './game.js';
-import { mulberry32 } from './random.js';
+import { createGameSetup, type GameSetup } from './game.ts';
+import { mulberry32 } from './random.ts';
 
 export interface LiteSeatInput {
   id: string;
