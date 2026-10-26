@@ -13,7 +13,8 @@ type GamePlayer = { id: string; name: string; seat: number; isBot: boolean; mini
 type LiteState = {
   version: number; status: "waiting" | "playing" | "finished"; createdAt: number;
   phase: string; phaseStartedAt: number; phaseDeadline: number | null; year: number;
-  players: GamePlayer[]; privateByPlayer: Record<string, { ministry: string; isMole: boolean; clue: string }>;
+  players: GamePlayer[]; privateByPlayer: Record<string, { ministry: string; isMole: boolean; clue: string; trueValue: number }>;
+  publishedClues: Array<{ playerId: string; name: string; ministry: string; value: number; year: number; at: number }>;
   readyByPlayer: Record<string, boolean>; chat: Array<{playerId:string;name:string;text:string;at:number}>;
   budgetDraft: Record<string, number> | null; votes: Record<string, boolean>; result: unknown;
   lastActionAt: Record<string, number>;
@@ -135,10 +136,15 @@ function initialLiteState(players: PlayerRow[]): LiteState {
     ministry: ministries[seat], isMole: seat === moleIndex, ready: false,
   }));
   const privateByPlayer: LiteState["privateByPlayer"] = {};
-  for (const player of gamePlayers) privateByPlayer[player.id] = {
-    ministry: player.ministry, isMole: player.isMole,
-    clue: player.isMole ? "You are the Mole. Secretly undermine the government without revealing yourself." : makePrivateClue(player.ministry),
-  };
+  for (const player of gamePlayers) {
+    const trueValue = player.ministry === "Finance"
+      ? 60 + (crypto.getRandomValues(new Uint32Array(1))[0] % 81)
+      : crypto.getRandomValues(new Uint32Array(1))[0] % 61;
+    privateByPlayer[player.id] = {
+      ministry: player.ministry, isMole: player.isMole, trueValue,
+      clue: player.isMole ? "You are the Mole. Secretly undermine the government without revealing yourself." : makePrivateClue(player.ministry),
+    };
+  }
   // The first human is PM first; bots only rotate in after every human has had a turn.
   const humans = gamePlayers.filter((p) => !p.isBot);
   const bots = gamePlayers.filter((p) => p.isBot);
@@ -147,7 +153,7 @@ function initialLiteState(players: PlayerRow[]): LiteState {
   return {
     version: 1, status: "playing", createdAt: Date.now(), phase: "headline",
     phaseStartedAt: Date.now(), phaseDeadline: Date.now() + 4000, year: 1,
-    players: ordered, privateByPlayer, readyByPlayer: {}, chat: [],
+    players: ordered, privateByPlayer, publishedClues: [], readyByPlayer: {}, chat: [],
     budgetDraft: null, votes: {}, result: null, lastActionAt: {},
     country: createInitialState(), lastPassedBudget: null, failedVotes: 0,
     pendingBudget: null, voteChoices: {}, crisisId: CRISIS_TEMPLATES[crypto.getRandomValues(new Uint32Array(1))[0] % CRISIS_TEMPLATES.length].id, yearResolution: null,
@@ -305,6 +311,23 @@ export default {
         });
         return jsonResponse({state:publicState(saved.state),status:saved.status});
       } catch(e) { return jsonResponse({error:e instanceof Error?e.message:"Could not advance game phase."},409); }
+    }
+    if(body.action==="publish-clue") {
+      const payload=body.payload as Record<string,unknown>|undefined;
+      if(!payload || !Number.isInteger(payload.value)) return jsonResponse({error:"Enter a whole-number clue."},400);
+      try {
+        const saved=await mutateGameState(db,room.id,(latest,roomStatus)=>{
+          if(!latest || latest.status!=="playing" || roomStatus!=="playing" || latest.phase!=="clue") throw new Error("Clues can only be published during the clue phase.");
+          const secret=latest.privateByPlayer[player.id];
+          if(!secret) throw new Error("Your private clue is unavailable.");
+          if(latest.publishedClues.some(c=>c.playerId===player.id && c.year===latest.year)) throw new Error("You have already published your clue this year.");
+          const value=Number(payload.value), min=secret.ministry==="Finance"?60:0, max=secret.ministry==="Finance"?140:60;
+          if(value<min || value>max) throw new Error(`Your clue must be between ${min} and ${max}.`);
+          const publishedClues=[...latest.publishedClues,{playerId:player.id,name:player.player_name,ministry:secret.ministry,value,year:latest.year,at:Date.now()}];
+          return {state:{...latest,publishedClues}};
+        });
+        return jsonResponse({state:publicState(saved.state)});
+      } catch(e) { return jsonResponse({error:e instanceof Error?e.message:"Could not publish clue."},409); }
     }
     if(body.action==="private") {
       if(!state)return jsonResponse({private:null});
