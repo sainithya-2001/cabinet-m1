@@ -1,6 +1,6 @@
 
-import { defaultBudget } from '../engine/index.js';
-import type { Budget, CountryState, Sector } from '../engine/index.js';
+import { defaultBudget } from '../engine/index.ts';
+import type { Budget, CountryState, Sector } from '../engine/index.ts';
 const RECKLESS_FUNDING_MULTIPLIER = 1.3;
 
 export function recklessTargetSpending(
