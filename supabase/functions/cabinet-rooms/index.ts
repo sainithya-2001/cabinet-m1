@@ -1,197 +1,194 @@
 import { withSupabase } from "@supabase/server";
 
 type RequestBody = {
-  action?: unknown;
-  roomCode?: unknown;
-  playerName?: unknown;
-  roomId?: unknown;
-  playerToken?: unknown;
+  action?: unknown; roomCode?: unknown; playerName?: unknown; roomId?: unknown;
+  playerToken?: unknown; ready?: unknown; phaseAction?: unknown; payload?: unknown;
 };
-
-function jsonResponse(body: Record<string, unknown>, status = 200): Response {
-  return Response.json(body, { status });
-}
-
+type Db = any;
+type PlayerRow = { id: string; player_name: string; joined_at: string; player_token_hash: string };
+type GamePlayer = { id: string; name: string; seat: number; isBot: boolean; ministry: string; isMole: boolean; ready: boolean };
+type LiteState = {
+  version: number; status: "waiting" | "playing" | "finished"; createdAt: number;
+  phase: string; phaseStartedAt: number; phaseDeadline: number | null; year: number;
+  players: GamePlayer[]; privateByPlayer: Record<string, { ministry: string; isMole: boolean; clue: string }>;
+  readyByPlayer: Record<string, boolean>; chat: Array<{playerId:string;name:string;text:string;at:number}>;
+  budgetDraft: Record<string, number> | null; votes: Record<string, boolean>; result: unknown;
+  lastActionAt: Record<string, number>;
+};
+function jsonResponse(body: Record<string, unknown>, status = 200): Response { return Response.json(body, { status }); }
 function randomToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, "0")).join("");
 }
-
 async function hashToken(token: string): Promise<string> {
-  const data = new TextEncoder().encode(token);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
-
 function generateRoomCode(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const bytes = crypto.getRandomValues(new Uint8Array(6));
-  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
+  return Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => alphabet[b % alphabet.length]).join("");
 }
-
+function shuffle<T>(items: T[]): T[] {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1);
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+  return items;
+}
+function makePrivateClue(ministry: string): string {
+  const clues: Record<string,string> = {
+    Finance: "You alone know the exact revenue figure for this year.",
+    Health: "You have the precise health-sector need for this year.",
+    Defense: "You have the precise security-sector need for this year.",
+    Education: "You have the precise education-sector need for this year.",
+    Environment: "You have the precise environment-sector need for this year.",
+    Economy: "You have the precise economy-sector need for this year.",
+  };
+  return clues[ministry] ?? "Watch the budget and look for inconsistencies in other ministers' claims.";
+}
+function publicState(state: LiteState) {
+  const { privateByPlayer: _private, readyByPlayer: _ready, lastActionAt: _rateLimit, ...visible } = state;
+  return { ...visible, players: visible.players.map(({ isMole: _mole, ...player }) => player) };
+}
+async function findPlayer(db: Db, roomId: string, token: string) {
+  const tokenHash = await hashToken(token);
+  const { data: player, error } = await db.from("game_players").select("id,player_name,joined_at,player_token_hash").eq("room_id", roomId).eq("player_token_hash", tokenHash).maybeSingle();
+  if (error) throw new Error("Could not verify player access.");
+  if (!player) throw new Error("Invalid player token.");
+  return player as PlayerRow;
+}
+function initialLiteState(players: PlayerRow[]): LiteState {
+  if (players.length < 2 || players.length > 6) throw new Error("Cabinet Lite requires 2–6 human players to start.");
+  const seatRows = shuffle(players.map((p) => ({ row: p, isBot: false })));
+  const botNames = ["Ada", "Boris", "Cleo", "Dmitri", "Elsie", "Felix"];
+  while (seatRows.length < 5) seatRows.push({ row: { id: "bot-" + (seatRows.length + 1), player_name: botNames[seatRows.length] ?? "Bot", joined_at: new Date().toISOString(), player_token_hash: "" }, isBot: true });
+  const ministries = shuffle(["Finance", "Health", "Defense", "Education", "Environment", "Economy", "Infrastructure", "Intelligence"]).slice(0, seatRows.length);
+  const moleIndex = crypto.getRandomValues(new Uint32Array(1))[0] % seatRows.length;
+  const humanCount = players.length;
+  const gamePlayers: GamePlayer[] = seatRows.map((item, seat) => ({
+    id: item.row.id, name: item.row.player_name, seat, isBot: item.isBot,
+    ministry: ministries[seat], isMole: seat === moleIndex, ready: false,
+  }));
+  const privateByPlayer: LiteState["privateByPlayer"] = {};
+  for (const player of gamePlayers) privateByPlayer[player.id] = {
+    ministry: player.ministry, isMole: player.isMole,
+    clue: player.isMole ? "You are the Mole. Secretly undermine the government without revealing yourself." : makePrivateClue(player.ministry),
+  };
+  // The first human is PM first; bots only rotate in after every human has had a turn.
+  const humans = gamePlayers.filter((p) => !p.isBot);
+  const bots = gamePlayers.filter((p) => p.isBot);
+  const first = crypto.getRandomValues(new Uint32Array(1))[0] % humans.length;
+  const ordered = [...humans.slice(first), ...humans.slice(0, first), ...bots].map((p, seat) => ({...p, seat}));
+  return {
+    version: 1, status: "playing", createdAt: Date.now(), phase: "headline",
+    phaseStartedAt: Date.now(), phaseDeadline: Date.now() + 4000, year: 1,
+    players: ordered, privateByPlayer, readyByPlayer: {}, chat: [],
+    budgetDraft: null, votes: {}, result: null, lastActionAt: {},
+  };
+}
 export default {
-  fetch: withSupabase(
-    { auth: ["publishable", "secret"] },
-    async (req, ctx) => {
-      if (req.method !== "POST") {
-        return jsonResponse({ error: "Method not allowed." }, 405);
-      }
+  fetch: withSupabase({ auth: ["publishable", "secret"] }, async (req, ctx) => {
+    if (req.method !== "POST") return jsonResponse({ error: "Method not allowed." }, 405);
+    let body: RequestBody;
+    try {
+      const parsed: unknown = await req.json();
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return jsonResponse({ error: "Invalid request body." }, 400);
+      body = parsed as RequestBody;
+    } catch { return jsonResponse({ error: "Request body must be valid JSON." }, 400); }
+    const db: Db = ctx.supabaseAdmin;
 
-      let body: RequestBody;
-      try {
-        const parsed: unknown = await req.json();
-        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-          return jsonResponse({ error: "Invalid request body." }, 400);
+    if (body.action === "create") {
+      const playerName = typeof body.playerName === "string" ? body.playerName.trim().slice(0, 30) || "Host" : "Host";
+      const playerToken = randomToken(), tokenHash = await hashToken(playerToken);
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const roomCode = generateRoomCode();
+        const { data: room, error } = await db.from("game_rooms").insert({room_code: roomCode,host_name: playerName,host_token_hash: tokenHash,game_state: {},status:"waiting"}).select("id").single();
+        if (error || !room) {
+          if (error?.code === "23505") continue;
+          console.error("Room creation failed:", error?.message);
+          return jsonResponse({ error: "Could not create the room. Please try again." }, 500);
         }
-        body = parsed as RequestBody;
-      } catch {
-        return jsonResponse({ error: "Request body must be valid JSON." }, 400);
-      }
-
-      if (body.action === "create") {
-        const playerName = typeof body.playerName === "string"
-          ? body.playerName.trim().slice(0, 30) || "Host"
-          : "Host";
-        const playerToken = randomToken();
-        const tokenHash = await hashToken(playerToken);
-
-        for (let attempt = 0; attempt < 5; attempt++) {
-          const roomCode = generateRoomCode();
-          const { data: room, error: roomError } = await ctx.supabaseAdmin
-            .from("game_rooms")
-            .insert({
-              room_code: roomCode,
-              host_name: playerName,
-              host_token_hash: tokenHash,
-              game_state: {},
-            })
-            .select("id")
-            .single();
-
-          if (roomError || !room) {
-            if (roomError?.code === "23505") continue;
-            console.error("Room creation failed:", roomError?.message);
-            return jsonResponse({ error: "Could not create the room. Please try again." }, 500);
-          }
-
-          // The host is a real game_players row so every human has one stable player ID.
-          const { error: hostError } = await ctx.supabaseAdmin
-            .from("game_players")
-            .insert({
-              room_id: room.id,
-              player_name: playerName,
-              player_token_hash: tokenHash,
-            });
-
-          if (hostError) {
-            console.error("Host player initialization failed:", hostError.message);
-            await ctx.supabaseAdmin.from("game_rooms").delete().eq("id", room.id);
-            return jsonResponse({ error: "Could not initialize the host player. Please try again." }, 500);
-          }
-
-          return jsonResponse({ roomCode, roomId: room.id, playerToken });
-        }
-
-        return jsonResponse({ error: "Could not generate a unique room code. Please try again." }, 503);
-      }
-
-      if (body.action === "join") {
-        if (typeof body.roomCode !== "string") {
-          return jsonResponse({ error: "Enter a valid room code." }, 400);
-        }
-        if (typeof body.playerName !== "string") {
-          return jsonResponse({ error: "Enter your player name." }, 400);
-        }
-
-        const roomCode = body.roomCode.trim().toUpperCase();
-        const playerName = body.playerName.trim();
-        if (!/^[A-Z0-9]{6}$/.test(roomCode)) {
-          return jsonResponse({ error: "Enter a valid six-character room code." }, 400);
-        }
-        if (playerName.length < 1 || playerName.length > 30) {
-          return jsonResponse({ error: "Your name must be between 1 and 30 characters." }, 400);
-        }
-
-        const { data: room, error: roomError } = await ctx.supabaseAdmin
-          .from("game_rooms")
-          .select("id")
-          .eq("room_code", roomCode)
-          .eq("status", "waiting")
-          .maybeSingle();
-
-        if (roomError) {
-          console.error("Room lookup failed:", roomError.message);
-          return jsonResponse({ error: "Could not look up that room." }, 500);
-        }
-        if (!room) {
-          return jsonResponse({ error: "Room not found or no longer accepting players." }, 404);
-        }
-
-        const playerToken = randomToken();
-        const tokenHash = await hashToken(playerToken);
-        const { error: playerError } = await ctx.supabaseAdmin
-          .from("game_players")
-          .insert({
-            room_id: room.id,
-            player_name: playerName,
-            player_token_hash: tokenHash,
-          });
-
+        const { error: playerError } = await db.from("game_players").insert({room_id: room.id,player_name: playerName,player_token_hash: tokenHash});
         if (playerError) {
-          if (playerError.code === "23505") {
-            return jsonResponse({ error: "That name is already taken in this room." }, 409);
-          }
-          console.error("Player join failed:", playerError.message);
-          return jsonResponse({ error: "Could not join the room." }, 500);
+          await db.from("game_rooms").delete().eq("id", room.id);
+          return jsonResponse({ error: "Could not initialize the host player." }, 500);
         }
-
-        return jsonResponse({ roomCode, roomId: room.id, playerToken });
+        return jsonResponse({roomCode,roomId:room.id,playerToken});
       }
+      return jsonResponse({error:"Could not generate a unique room code."},503);
+    }
 
-      if (body.action === "players") {
-        if (typeof body.roomId !== "string" || typeof body.playerToken !== "string") {
-          return jsonResponse({ error: "Room ID and player token are required." }, 400);
-        }
+    if (body.action === "join") {
+      if (typeof body.roomCode !== "string" || typeof body.playerName !== "string") return jsonResponse({error:"Room code and player name are required."},400);
+      const roomCode=body.roomCode.trim().toUpperCase(), playerName=body.playerName.trim();
+      if (!/^[A-Z0-9]{6}$/.test(roomCode)) return jsonResponse({error:"Enter a valid six-character room code."},400);
+      if (playerName.length<1 || playerName.length>30) return jsonResponse({error:"Your name must be between 1 and 30 characters."},400);
+      const {data:room,error}=await db.from("game_rooms").select("id").eq("room_code",roomCode).eq("status","waiting").maybeSingle();
+      if(error)return jsonResponse({error:"Could not look up that room."},500);
+      if(!room)return jsonResponse({error:"Room not found or no longer accepting players."},404);
+      const {count}=await db.from("game_players").select("id",{count:"exact",head:true}).eq("room_id",room.id);
+      if((count??0)>=6)return jsonResponse({error:"This room already has six human players."},409);
+      const playerToken=randomToken(),tokenHash=await hashToken(playerToken);
+      const {error:playerError}=await db.from("game_players").insert({room_id:room.id,player_name:playerName,player_token_hash:tokenHash});
+      if(playerError)return jsonResponse({error:playerError.code==="23505"?"That name is already taken in this room.":"Could not join the room."},playerError.code==="23505"?409:500);
+      return jsonResponse({roomCode,roomId:room.id,playerToken});
+    }
 
-        const tokenHash = await hashToken(body.playerToken);
-        const { data: room, error: roomError } = await ctx.supabaseAdmin
-          .from("game_rooms")
-          .select("id")
-          .eq("id", body.roomId)
-          .maybeSingle();
+    if (typeof body.roomId !== "string" || typeof body.playerToken !== "string") return jsonResponse({error:"Room ID and player token are required."},400);
+    let player: PlayerRow;
+    try { player=await findPlayer(db,body.roomId,body.playerToken); }
+    catch(e) { return jsonResponse({error:e instanceof Error?e.message:"Could not verify player access."},401); }
 
-        if (roomError || !room) {
-          return jsonResponse({ error: "Room not found." }, 404);
-        }
+    const {data:room,error:roomError}=await db.from("game_rooms").select("id,room_code,status,game_state,host_token_hash").eq("id",body.roomId).maybeSingle();
+    if(roomError||!room)return jsonResponse({error:"Room not found."},404);
+    const state = room.game_state as LiteState | null;
 
-        const { data: player, error: authError } = await ctx.supabaseAdmin
-          .from("game_players")
-          .select("id")
-          .eq("room_id", room.id)
-          .eq("player_token_hash", tokenHash)
-          .maybeSingle();
-
-        if (authError) {
-          return jsonResponse({ error: "Could not verify player access." }, 500);
-        }
-        if (!player) {
-          return jsonResponse({ error: "Invalid player token." }, 401);
-        }
-
-        const { data: players, error: playersError } = await ctx.supabaseAdmin
-          .from("game_players")
-          .select("player_name, joined_at")
-          .eq("room_id", room.id)
-          .order("joined_at", { ascending: true });
-
-        if (playersError) {
-          return jsonResponse({ error: "Could not load players." }, 500);
-        }
-
-        return jsonResponse({ players: players ?? [] });
-      }
-
-      return jsonResponse({ error: "Unknown action." }, 400);
-    },
-  ),
+    if(body.action==="players") {
+      const {data:players,error}=await db.from("game_players").select("player_name,joined_at").eq("room_id",room.id).order("joined_at",{ascending:true});
+      if(error)return jsonResponse({error:"Could not load players."},500);
+      return jsonResponse({players:players??[]});
+    }
+    if(body.action==="start") {
+      if(room.host_token_hash!==await hashToken(body.playerToken))return jsonResponse({error:"Only the host can start the game."},403);
+      if(room.status!=="waiting")return jsonResponse({error:"This game has already started."},409);
+      const {data:rows,error}=await db.from("game_players").select("id,player_name,joined_at,player_token_hash").eq("room_id",room.id).order("joined_at",{ascending:true});
+      if(error)return jsonResponse({error:"Could not load players."},500);
+      try {
+        const next=initialLiteState((rows??[]) as PlayerRow[]);
+        const {error:updateError}=await db.from("game_rooms").update({game_state:next,status:"playing"}).eq("id",room.id).eq("status","waiting");
+        if(updateError)return jsonResponse({error:"Could not start game."},500);
+        return jsonResponse({state:publicState(next),private:next.privateByPlayer[player.id]});
+      } catch(e) { return jsonResponse({error:e instanceof Error?e.message:"Could not start game."},400); }
+    }
+    if(body.action==="state") {
+      if(!state)return jsonResponse({state:null,status:room.status});
+      return jsonResponse({state:publicState(state),status:room.status});
+    }
+    if(body.action==="private") {
+      if(!state)return jsonResponse({private:null});
+      return jsonResponse({private:state.privateByPlayer?.[player.id]??null});
+    }
+    if(body.action==="ready") {
+      if(!state||state.status!=="playing")return jsonResponse({error:"The game has not started."},409);
+      const readyByPlayer={...state.readyByPlayer,[player.id]:true};
+      const next={...state,readyByPlayer,version:state.version+1};
+      const {error}=await db.from("game_rooms").update({game_state:next}).eq("id",room.id).eq("status","playing");
+      if(error)return jsonResponse({error:"Could not save ready status."},500);
+      return jsonResponse({state:publicState(next)});
+    }
+    if(body.action==="chat") {
+      if(!state||state.status!=="playing")return jsonResponse({error:"The game has not started."},409);
+      if(["vote","result","finished"].includes(state.phase))return jsonResponse({error:"Chat is closed during voting and results."},409);
+      if(typeof body.payload!=="object"||body.payload===null||typeof (body.payload as Record<string,unknown>).text!=="string")return jsonResponse({error:"Message text is required."},400);
+      const text=((body.payload as Record<string,string>).text).trim();
+      if(!text||text.length>140)return jsonResponse({error:"Messages must be 1–140 characters."},400);
+      const now=Date.now(),last=state.lastActionAt[player.id]??0;
+      if(now-last<1000)return jsonResponse({error:"Please wait before sending another message."},429);
+      const chat=[...state.chat,{playerId:player.id,name:player.player_name,text,at:now}].slice(-100);
+      const next={...state,chat,lastActionAt:{...state.lastActionAt,[player.id]:now},version:state.version+1};
+      const {error}=await db.from("game_rooms").update({game_state:next}).eq("id",room.id);
+      if(error)return jsonResponse({error:"Could not send message."},500);
+      return jsonResponse({state:publicState(next)});
+    }
+    return jsonResponse({error:"Unknown action."},400);
+  }),
 };
