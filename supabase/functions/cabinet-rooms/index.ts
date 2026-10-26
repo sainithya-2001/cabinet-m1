@@ -372,9 +372,18 @@ export default {
           if(resolution.state.collapsed)next={...next,status:"finished",phase:"finished",phaseDeadline:null};
         }
       }
-      const {error}=await db.from("game_rooms").update({game_state:next,status:next.status}).eq("id",room.id);
+      // Votes can arrive from several clients at once. Commit only against the version
+      // this request read, otherwise one voter could overwrite another voter's choice.
+      const {data:updated,error}=await db.from("game_rooms")
+        .update({game_state:next,status:next.status})
+        .eq("id",room.id)
+        .eq("status","playing")
+        .eq("game_state->>version",String(state.version))
+        .select("game_state,status")
+        .maybeSingle();
       if(error)return jsonResponse({error:"Could not save vote."},500);
-      return jsonResponse({state:publicState(next)});
+      if(!updated)return jsonResponse({error:"The game changed while your vote was being saved. Refresh and vote again."},409);
+      return jsonResponse({state:publicState(updated.game_state as LiteState)});
     }
     if(body.action==="guess") {
       if(!state || state.status!=="playing" || state.phase!=="guess") return jsonResponse({error:"Mole guesses are only open at the end of Year 3."},409);
