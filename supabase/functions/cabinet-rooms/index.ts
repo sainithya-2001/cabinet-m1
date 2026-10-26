@@ -2,7 +2,7 @@ import { createInitialState, resolveYear } from "../../../src/engine/economy.ts"
 import { makeCrisis, CRISIS_TEMPLATES } from "../../../src/engine/crises.ts";
 import type { Budget, CountryState, YearInputs } from "../../../src/engine/types.ts";
 import { mutateVersionedState } from "../../../src/engine/versioned-mutation.ts";
-import { toPublicGameState } from "../../../src/engine/public-game-state.ts";
+import { toPublicGameState, type GamePlayer, type PublishedClue } from "../../../src/engine/public-game-state.ts";
 import { withSupabase } from "@supabase/server";
 
 type RequestBody = {
@@ -11,12 +11,11 @@ type RequestBody = {
 };
 type Db = any;
 type PlayerRow = { id: string; player_name: string; joined_at: string; player_token_hash: string };
-type GamePlayer = { id: string; name: string; seat: number; isBot: boolean; ministry: string; isMole: boolean; ready: boolean };
 type LiteState = {
   version: number; status: "waiting" | "playing" | "finished"; createdAt: number;
   phase: string; phaseStartedAt: number; phaseDeadline: number | null; year: number;
   players: GamePlayer[]; privateByPlayer: Record<string, { ministry: string; isMole: boolean; clue: string; trueValue: number }>;
-  publishedClues: Array<{ playerId: string; name: string; ministry: string; value: number; year: number; at: number }>;
+  publishedClues: PublishedClue[];
   readyByPlayer: Record<string, boolean>;
   budgetDraft: Record<string, number> | null; votes: Record<string, boolean>; result: unknown;
   lastActionAt: Record<string, number>;
