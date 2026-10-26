@@ -1,5 +1,5 @@
 
-import { supabase } from './supabase.js';
+import { supabase } from './supabase.ts';
 
 type RoomResponse = {
   roomCode: string;
