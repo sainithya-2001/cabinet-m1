@@ -1,11 +1,11 @@
 
 import { describe, expect, it } from 'vitest';
-import { createGameSetup } from '../src/engine/game.js';
+import { createGameSetup } from '../src/engine/game.ts';
 
-import { createGameFlow, advancePhase } from '../src/engine/game-flow.js';
-import { createInitialState, defaultBudget, resolveYear } from '../src/engine/economy.js';
-import { applyEconomicPower } from '../src/engine/power-effects.js';
-import type { YearInputs } from '../src/engine/types.js';
+import { createGameFlow, advancePhase } from '../src/engine/game-flow.ts';
+import { createInitialState, defaultBudget, resolveYear } from '../src/engine/economy.ts';
+import { applyEconomicPower } from '../src/engine/power-effects.ts';
+import type { YearInputs } from '../src/engine/types.ts';
 
 function makeFlow() {
   const setup = createGameSetup(
