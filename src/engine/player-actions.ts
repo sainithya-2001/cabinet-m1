@@ -1,6 +1,6 @@
 
-import type { GamePlayer } from './game.js';
-import type { GameFlow, GamePhase } from './game-flow.js';
+import type { GamePlayer } from './game.ts';
+import type { GameFlow, GamePhase } from './game-flow.ts';
 
 export function assertPlayerCanAct(
   flow: GameFlow,
