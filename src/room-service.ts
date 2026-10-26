@@ -93,7 +93,7 @@ export type PublicGamePlayer = {
 export type PublicGameState = {
   version: number; status: 'waiting' | 'playing' | 'finished'; createdAt: number;
   phase: string; phaseStartedAt: number; phaseDeadline: number | null; year: number;
-  players: PublicGamePlayer[]; publishedClues: Array<{playerId:string;name:string;ministry:string;value:number;year:number;at:number}>;
+  players: PublicGamePlayer[]; backbenchers: Array<{id:string;name:string;portrait:string}>; publishedClues: Array<{playerId:string;name:string;ministry:string;value:number;year:number;at:number}>;
   budgetDraft: Record<string, number> | null; votes: Record<string, boolean>; result: unknown;
   primeMinisterId?: string | null; voteChoices?: Record<string, boolean>; guesses?: Record<string, string>; yearResolution?: unknown;
   country?: { economy:number; happiness:number; stability:number; environment:number; debt:number; collapsed:boolean; collapseReasons:string[] } | null;
@@ -108,8 +108,8 @@ async function callGameAction<T>(roomId: string, playerToken: string, action: st
   if (!data || data.error) throw new Error(data?.error || 'The game server returned an invalid response.');
   return data as T;
 }
-export async function startGame(roomId: string, playerToken: string) {
-  return callGameAction<{ state: PublicGameState; private: PrivateGameInfo }>(roomId, playerToken, 'start');
+export async function startGame(roomId: string, playerToken: string, solo = false) {
+  return callGameAction<{ state: PublicGameState; private: PrivateGameInfo }>(roomId, playerToken, 'start', { solo });
 }
 export async function getGameState(roomId: string, playerToken: string) {
   return callGameAction<{ state: PublicGameState | null; status?: string }>(roomId, playerToken, 'state');

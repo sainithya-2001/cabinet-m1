@@ -14,7 +14,7 @@ type PlayerRow = { id: string; player_name: string; joined_at: string; player_to
 type LiteState = {
   version: number; status: "waiting" | "playing" | "finished"; createdAt: number;
   phase: string; phaseStartedAt: number; phaseDeadline: number | null; year: number;
-  players: GamePlayer[]; privateByPlayer: Record<string, { ministry: string; isMole: boolean; clue: string; trueValue: number }>;
+  players: GamePlayer[]; backbenchers: Array<{id:string;name:string;portrait:string}>; privateByPlayer: Record<string, { ministry: string; isMole: boolean; clue: string; trueValue: number }>;
   publishedClues: PublishedClue[];
   readyByPlayer: Record<string, boolean>;
   budgetDraft: Record<string, number> | null; votes: Record<string, boolean>; result: unknown;
@@ -133,11 +133,13 @@ function botVoteChoices(state: LiteState): Record<string, boolean> {
   }
   return choices;
 }
-function initialLiteState(players: PlayerRow[]): LiteState {
-  if (players.length < 2 || players.length > 6) throw new Error("Cabinet Lite requires 2–6 human players to start.");
+function initialLiteState(players: PlayerRow[], solo = false): LiteState {
+  if (players.length < (solo ? 1 : 2) || players.length > 6) throw new Error(solo ? "Solo test mode requires one human player." : "Cabinet Lite requires 2–6 human players to start.");
   const seatRows = players.map((p) => ({ row: p, isBot: false }));
-  const botNames = ["Ada", "Boris", "Cleo", "Dmitri", "Elsie", "Felix"];
-  while (seatRows.length < 5) seatRows.push({ row: { id: "bot-" + (seatRows.length + 1), player_name: botNames[seatRows.length] ?? "Bot", joined_at: new Date().toISOString(), player_token_hash: "" }, isBot: true });
+  const botPool = shuffle([{name:"Sir Nodsalot",portrait:"sir-nodsalot"},{name:"Baroness Slowclap",portrait:"baroness-slowclap"},{name:"Sir Reginald Filibuster",portrait:"sir-reginald-fil ibuster"},{name:"The Hon. Member for Shouting",portrait:"hon-member-for-shouting"},{name:"Minister Low-Battery",portrait:"minister-low-battery"},{name:"The Paper-Tearer",portrait:"the-paper-tearer"},{name:"Sir Point-of-Order",portrait:"sir-point-of-order"},{name:"Lord Ribbon-Cutter",portrait:"lord-ribbon-cutter"}]);
+  const cabinetBots=botPool.slice(0,Math.max(0,5-seatRows.length));
+  for(const [index,bot] of cabinetBots.entries()) seatRows.push({row:{id:"bot-"+(index+1),player_name:bot.name,joined_at:new Date().toISOString(),player_token_hash:""},isBot:true});
+  const backbenchers=botPool.slice(cabinetBots.length).map((bot,index)=>({id:"backbench-"+index,name:bot.name,portrait:bot.portrait}));
   const ministryOrder = ["Finance", "Health", "Defense", "Education", "Environment", "Economy"];
   const ministries = ministryOrder.slice(0, seatRows.length);
   // The Mole may be any cabinet member, including a bot, as specified by the game rules.
@@ -164,7 +166,7 @@ function initialLiteState(players: PlayerRow[]): LiteState {
   return {
     version: 1, status: "playing", createdAt: Date.now(), phase: "headline",
     phaseStartedAt: Date.now(), phaseDeadline: Date.now() + 4000, year: 1,
-    players: ordered, privateByPlayer, publishedClues: [], readyByPlayer: {},
+    players: ordered, backbenchers, privateByPlayer, publishedClues: [], readyByPlayer: {},
     budgetDraft: null, votes: {}, result: null, lastActionAt: {},
     country: initialCountry, lastPassedBudget: null, failedVotes: 0,
     pendingBudget: null, voteChoices: {}, crisisId: initialCrisisId, yearResolution: null,
@@ -238,7 +240,7 @@ export default {
       const {data:rows,error}=await db.from("game_players").select("id,player_name,joined_at,player_token_hash").eq("room_id",room.id).order("joined_at",{ascending:true});
       if(error)return jsonResponse({error:"Could not load players."},500);
       try {
-        const initial=initialLiteState((rows??[]) as PlayerRow[]);
+        const initial=initialLiteState((rows??[]) as PlayerRow[], (body.payload as Record<string,unknown>|undefined)?.solo === true);
         const saved=await mutateGameState(db,room.id,(latest,roomStatus)=>{
           if(roomStatus!=="waiting" || (latest && (latest.version!==0 || Object.keys(latest).some(k=>k!=="version"))))throw new Error("This game has already started.");
           return {state:initial,status:"playing"};
@@ -452,6 +454,14 @@ export default {
         const channel=db.channel("cabinet-chat:"+room.id);
         const sent=await channel.send({type:"broadcast",event:"chat-message",payload:message});
         if(sent==="error")throw new Error("Could not broadcast chat message.");
+        const lower=text.toLowerCase(), reacts=/\b(lie|liar|trust)\b/.test(lower)||/\b(8[0-9]|9[0-9]|1[0-4][0-9])\b/.test(text), busy=lower.includes("!")||lower.includes("order")||text.length>110;
+        if(reacts&&state.backbenchers?.length){
+          const pick=state.backbenchers[crypto.getRandomValues(new Uint32Array(1))[0]%state.backbenchers.length];
+          const lines:Record<string,string[]>={"Sir Nodsalot":["Zzz… wait, someone said liar? Aye. Probably.","I was asleep for that number. It sounded suspicious."],"Baroness Slowclap":["👏 A 👏 deeply 👏 convincing 👏 claim.","How brave. A number with absolutely no supporting evidence."],"Sir Reginald Filibuster":["Before we call anyone a liar, a brief history of inaccurate figures…","I shall respond in three volumes. This is volume one."],"The Hon. Member for Shouting":["OUTRAGEOUS! THAT NUMBER IS LOUDLY WRONG!","LIAR? I DEMAND A LOUDER LIAR!"],"Minister Low-Battery":["sorry was that a lie or a group chat","one sec… checking if trust is on this app"],"The Paper-Tearer":["*tears up the claim*","This claim has been rejected by the paper shredder."],"Sir Point-of-Order":["POINT OF ORDER: define “trust” before proceeding.","Your accusation lacks a properly numbered appendix."],"Lord Ribbon-Cutter":["I propose a ribbon-cutting ceremony for this enormous number.","Imagine the headline. Imagine the scissors."]};
+          const options=lines[pick.name]??["I have concerns about this claim. Very theatrical concerns."], reply={id:crypto.randomUUID(),playerId:pick.id,name:pick.name,text:options[crypto.getRandomValues(new Uint32Array(1))[0]%options.length],at:Date.now()};
+          await channel.send({type:"broadcast",event:"chat-message",payload:reply});
+        }
+        if(busy) await channel.send({type:"broadcast",event:"chat-message",payload:{id:crypto.randomUUID(),playerId:"speaker-thunderbottom",name:"Speaker Thunderbottom",text:"ORDER! The House will stop shouting over its own shouting!",at:Date.now()}});
         return jsonResponse({message});
       } catch(e) { return jsonResponse({error:e instanceof Error?e.message:"Could not send message."},500); }
     }

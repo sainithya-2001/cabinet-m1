@@ -6,7 +6,7 @@ Oct 25, 2026 · Replaces the full spec for the submission build. The full spec s
 
 **Cabinet: Run the country. Find the liar.**
 
-Players run the fictional Republic of Veloria for 3 years. A game takes 3–4 minutes. The cabinet always has at least 5 ministers: every human player, plus bot ministers in the empty seats. One minister, human or bot, is secretly the Mole and wants Veloria to fail.
+Players run the fictional Republic of Veloria for 3 years. A game takes 3–4 minutes. The cabinet has exactly 5 ministers: every human player, plus bot ministers to fill empty seats. Remaining meme characters are backbenchers: they appear in the chamber and chat, heckle and react, but never vote, hold clues, or become PM. One cabinet minister is the Mole.
 
 - **Players:** 2–6 humans, each on their own phone or computer, anywhere. No one needs to be in the same room or on a call. With 2–4 humans, bots fill the cabinet to 5. With 5 or 6 humans, there are no bots.
 - **Joining:** the creator gets a link with the room code built in. Opening it asks only for a name. No accounts, no installs.
@@ -41,9 +41,13 @@ The server sets and enforces every deadline. A phase ends early when every human
 | Clue + chat | Each player sees their private clue; everyone argues in chat and can publish their clue | 15 s | 45 s (60 s) |
 | Budget | The PM places 10 coins; the coins move live on every screen, with predicted effects | 0 s | 30 s (40 s) |
 | Vote | Every minister votes Yes or No; votes fill in live | 0 s | 10 s (15 s) |
-| Result | What changed and why, a headline, a Real world note | 0 s | 10 s (15 s) |
+| Result | What changed and why, a headline, one joke per indicator | 0 s | 10 s (15 s) |
 
 A year takes at most about 1.5 minutes, and usually less, because phases skip ahead when everyone is ready.
+
+### Chamber presentation
+
+Show the Speaker above the cabinet, exactly five cabinet seats (or six when six humans join), illustrated-style portraits, nameplates, ministries, AYE/NO placards and speech bubbles. Backbenchers are visible but have no minister actions. Chat is a scrollable log. On phones, stack chat below the chamber.
 
 **Prime Minister order:** humans go first. Year 1's PM is a random human; each later year goes to the next human who hasn't been PM yet. Bots are PM only once every human has had a turn. With 2 humans, both are PM once, and a bot drafts Year 3.
 
@@ -117,7 +121,7 @@ Each game draws the bots it needs at random from this pool, so the cabinet chang
 | The Hon. Member for Shouting | The parliament brawl | "OUTRAGEOUS! Health needs EVERYTHING!" | Over-reports crisis needs by about 30% |
 | Minister Low-Battery | On the phone mid-debate | "sorry what are we voting on lol" | Honest; copies the majority vote |
 | The Paper-Tearer | Ripping up the speech | "*rips budget in half*" | Honest; votes No when Health or Education gets under 2 coins |
-| Comrade Point-of-Order | The pedant | "POINT OF ORDER: that number is wrong." | Always honest; calls out published numbers far from normal |
+| Sir Point-of-Order | The fussy pedant with a rulebook | "POINT OF ORDER: your comma is out of order." | Always honest; calls out published numbers far from normal |
 | Lord Ribbon-Cutter | The photo-op minister | "Imagine the BRIDGE. Imagine the photos." | Over-reports and always asks for Economy coins |
 
 ### How bots behave
@@ -125,7 +129,9 @@ Each game draws the bots it needs at random from this pool, so the cabinet chang
 - **Loyal bots are predictable.** Each always shows its tell, so players can learn that a lowball from the Baroness is normal for her.
 - **A Mole bot breaks its tell.** It keeps its name and voice, but lies in the direction that hurts the country (for example, Lord Ribbon-Cutter suddenly lowballing Health during an outbreak) and votes for budgets that underfund the crisis. Spotting the broken pattern is the deduction.
 - **As PM,** a loyal bot uses the simulator's Balanced strategy, shifted toward its bias; a Mole bot uses the Mole strategy.
-- **Chat is templates, not an AI model:** about 10 lines per bot, filled with real values from the game ("Health wants 34? In this economy?"). Each bot posts 1–3 lines per year.
+- **Chat is templates, not an AI model:** about 10 lines per character, filled with real values. Bots react to human messages containing “lie”, “liar”, “trust”, or conspicuously large numbers; busy chat triggers “ORDER!” from the Speaker.
+- **Backbenchers never hold ministries or clues, publish clues, vote, become PM, or become the Mole.
+- **Solo test mode:** `?solo=1` lets one human start with bots filling cabinet seats.
 - **Timing:** the server decides all bot moves when a phase starts and stamps each with a staggered time 3–20 s into the phase, so bots appear to type, publish and vote naturally on every screen.
 - **Disconnects:** if a human is gone for more than 15 s, a bot plays their seat (with no personality, using the Balanced strategy, never lying) until they return. A human Mole's seat keeps playing as the Mole.
 
@@ -135,20 +141,11 @@ The Result screen shows three things, all generated from what actually happened.
 
 1. **The cause breakdown.** Each indicator's change split into causes that add up exactly, from the engine, for example "Happiness −8: Health underfunded during the floods −5, flood damage −4, Education +1".
 2. **A headline,** filled from a template for the year's biggest cause, for example "HOSPITALS OVERWHELMED AS PM PRIYA GIVES HEALTH ONE COIN" or "NATION SHOCKED TO DISCOVER ROADS COST MONEY". Write 3 variants per cause type and pick one with the game's seeded random. The jokes target Veloria's fictional government, never real parties or politicians.
-3. **One Real world note,** the learning moment. Pick the highest-priority trigger that fired this year, and never repeat a note within a game.
+3. **One joke per indicator**, explaining the change with a short template grounded in the actual causes. No Real world notes.
 
-| Trigger (in priority order) | Real world note (concept) |
-| --- | --- |
-| Two failed votes, shutdown | When governments can't agree on a budget, services are cut while they argue (budget shutdowns). |
-| A sector underfunded during its own crisis | Crises cost more when the system was already stretched (preparedness). |
-| Money borrowed this year | Borrowing helps now, but interest takes money from every future budget (debt and interest). |
-| Interest above 5 B | The interest bill is now competing with hospitals and schools (crowding out). |
-| Environment fell mainly from Industry | Pollution is a real cost that isn't on the factory's bill (externalities). |
-| Education spending above its need | Education pays back, but years later, which makes it easy to cut (delayed returns). |
-| A sector funded far above its need | Each extra coin did less than the last (diminishing returns). |
-| Revenue came in outside the public range's middle | Governments budget with forecasts, not certainties (fiscal uncertainty). |
+Use a short, template-driven Veloria-government joke for each indicator’s actual cause breakdown. No Real world notes are shown.
 
-Notes stay factual and non-partisan: they explain how a mechanism works, never which policy is right.
+Jokes target Veloria’s fictional government only.
 
 ## The newspaper recap
 
@@ -158,7 +155,7 @@ The end screen is the front page of The Veloria Times, built only from the serve
 - **Who lied:** every published clue next to its true value, with lies highlighted.
 - **The three years:** for each year, the crisis, the PM, whether the budget passed, and the biggest change.
 - **Chart:** the five indicators across the three years, with collapse lines marked.
-- **What you learned:** the Real world notes this game triggered, in one box.
+- **Indicator jokes:** one short joke per indicator, grounded in its cause breakdown.
 
 Nice to have: a button that downloads the front page as an image to share.
 

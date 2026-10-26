@@ -12,7 +12,7 @@ export type PublicCountryState = Pick<CountryState, 'year' | 'economy' | 'happin
 type LiteGameState = {
   version: number; status: 'waiting' | 'playing' | 'finished'; createdAt: number;
   phase: string; phaseStartedAt: number; phaseDeadline: number | null; year: number;
-  players: GamePlayer[];
+  players: GamePlayer[]; backbenchers?: Array<{id:string;name:string;portrait:string}>;
   privateByPlayer: Record<string, { ministry: string; isMole: boolean; clue: string; trueValue: number }>;
   publishedClues: PublishedClue[];
   readyByPlayer: Record<string, boolean>;
@@ -26,7 +26,7 @@ type LiteGameState = {
 export type PublicGameState = {
   version: number; status: 'waiting' | 'playing' | 'finished'; createdAt: number;
   phase: string; phaseStartedAt: number; phaseDeadline: number | null; year: number;
-  players: PublicGamePlayer[]; publishedClues: PublicPublishedClue[];
+  players: PublicGamePlayer[]; backbenchers: Array<{id:string;name:string;portrait:string}>; publishedClues: PublicPublishedClue[];
   budgetDraft: Record<string, number> | null; votes: Record<string, boolean>; result: unknown;
   country: PublicCountryState | null; lastPassedBudget: unknown; failedVotes: 0 | 1;
   voteChoices: Record<string, boolean>; crisisId: string | null; yearResolution: unknown;
@@ -55,6 +55,7 @@ export function toPublicGameState(state: LiteGameState): PublicGameState {
     phaseDeadline: state.phaseDeadline,
     year: state.year,
     players: state.players.map(({ id, name, seat, isBot, ministry, ready }) => ({ id, name, seat, isBot, ministry, ready })),
+    backbenchers: (state.backbenchers ?? []).map(({id,name,portrait})=>({id,name,portrait})),
     publishedClues: state.publishedClues.map(({ playerId, name, ministry, value, year, at }) => ({ playerId, name, ministry, value, year, at })),
     budgetDraft: state.budgetDraft ? { ...state.budgetDraft } : null,
     votes: { ...state.votes },
