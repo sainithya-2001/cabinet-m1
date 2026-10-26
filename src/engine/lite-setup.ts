@@ -65,7 +65,7 @@ export function createLiteGameSetup(
     namesById.set(`player-${i + 1 + humanSeats.length}`, name);
   }
 
-  const base = createGameSetup(seed, namesForEngine, 'standard', 'quick');
+  const base = createGameSetup(seed, namesForEngine, 'standard', 'full');
   const rng = mulberry32(seed ^ 0x4c495445);
   const humanIdsByEngineId = new Map<string, string>();
   humanSeats.forEach((human, index) => humanIdsByEngineId.set(`player-${index + 1}`, human.id));
