@@ -1,3 +1,6 @@
+import { createInitialState, resolveYear } from "../../../src/engine/economy.ts";
+import { makeCrisis, CRISIS_TEMPLATES } from "../../../src/engine/crises.ts";
+import type { Budget, CountryState, YearInputs } from "../../../src/engine/types.ts";
 import { withSupabase } from "@supabase/server";
 
 type RequestBody = {
@@ -14,6 +17,13 @@ type LiteState = {
   readyByPlayer: Record<string, boolean>; chat: Array<{playerId:string;name:string;text:string;at:number}>;
   budgetDraft: Record<string, number> | null; votes: Record<string, boolean>; result: unknown;
   lastActionAt: Record<string, number>;
+  country: CountryState | null;
+  lastPassedBudget: Budget | null;
+  failedVotes: 0 | 1;
+  pendingBudget: Budget | null;
+  voteChoices: Record<string, boolean>;
+  crisisId: string | null;
+  yearResolution: unknown;
 };
 function jsonResponse(body: Record<string, unknown>, status = 200): Response { return Response.json(body, { status }); }
 function randomToken(): string {
@@ -83,6 +93,8 @@ function initialLiteState(players: PlayerRow[]): LiteState {
     phaseStartedAt: Date.now(), phaseDeadline: Date.now() + 4000, year: 1,
     players: ordered, privateByPlayer, readyByPlayer: {}, chat: [],
     budgetDraft: null, votes: {}, result: null, lastActionAt: {},
+    country: createInitialState(), lastPassedBudget: null, failedVotes: 0,
+    pendingBudget: null, voteChoices: {}, crisisId: null, yearResolution: null,
   };
 }
 export default {
@@ -193,6 +205,59 @@ export default {
       const next={...state,readyByPlayer,version:state.version+1};
       const {error}=await db.from("game_rooms").update({game_state:next}).eq("id",room.id).eq("status","playing");
       if(error)return jsonResponse({error:"Could not save ready status."},500);
+      return jsonResponse({state:publicState(next)});
+    }
+    if(body.action==="budget") {
+      if(!state || state.status!=="playing") return jsonResponse({error:"The game has not started."},409);
+      if(state.phase!=="budget") return jsonResponse({error:"Budget drafts are only accepted during the budget phase."},409);
+      const currentPm=state.players.find(p=>!p.isBot && p.id===player.id);
+      if(!currentPm) return jsonResponse({error:"Only human ministers can submit this action."},403);
+      if(!state.players.filter(p=>!p.isBot).length) return jsonResponse({error:"No human ministers found."},409);
+      const payload=body.payload as Record<string,unknown>|undefined;
+      if(!payload || typeof payload!=="object") return jsonResponse({error:"Budget payload is required."},400);
+      const draft=payload as Record<string,unknown>;
+      const lines=["health","education","security","environment","economy"];
+      if(lines.some(k=>!Number.isInteger(draft[k]) || Number(draft[k])<0 || Number(draft[k])>10) || lines.reduce((sum,k)=>sum+Number(draft[k]??0),0)!==10 || ![0,10,20].includes(Number(draft.borrowing))) return jsonResponse({error:"Allocate exactly ten whole coins and choose borrowing 0, 10 or 20."},400);
+      const shares={health:Number(draft.health)*10,education:Number(draft.education)*10,security:Number(draft.security)*10,environment:Number(draft.environment)*10,infrastructure:Number(draft.economy)*5,industry:Number(draft.economy)*5,debtRepayment:0};
+      const budget:Budget={shares,borrowing:Number(draft.borrowing)};
+      const next={...state,budgetDraft:draft,pendingBudget:budget,phase:"vote",phaseStartedAt:Date.now(),phaseDeadline:Date.now()+(state.year===1?15000:10000),votes:{},voteChoices:{},readyByPlayer:{},version:state.version+1};
+      const {error}=await db.from("game_rooms").update({game_state:next}).eq("id",room.id).eq("status","playing");
+      if(error)return jsonResponse({error:"Could not submit budget."},500);
+      return jsonResponse({state:publicState(next)});
+    }
+    if(body.action==="vote") {
+      if(!state || state.status!=="playing" || state.phase!=="vote" || !state.pendingBudget || !state.country) return jsonResponse({error:"There is no active budget vote."},409);
+      const payload=body.payload as Record<string,unknown>|undefined;
+      if(typeof payload?.yes!=="boolean")return jsonResponse({error:"Choose yes or no."},400);
+      if(state.voteChoices[player.id]!==undefined)return jsonResponse({error:"You have already voted."},409);
+      const voteChoices={...state.voteChoices,[player.id]:payload.yes};
+      const humans=state.players.filter(p=>!p.isBot);
+      const allVoted=humans.every(p=>voteChoices[p.id]!==undefined);
+      const now=Date.now();
+      let next={...state,voteChoices,votes:voteChoices,version:state.version+1};
+      if(allVoted || (state.phaseDeadline!==null && now>=state.phaseDeadline)) {
+        const yes=Object.values(voteChoices).filter(Boolean).length;
+        const no=Object.values(voteChoices).filter(v=>!v).length;
+        if(yes>no) {
+          const crisisId=state.crisisId ?? CRISIS_TEMPLATES[0].id;
+          const crisis=makeCrisis(crisisId,2);
+          const inputs:YearInputs={revenueTradeModifier:0,interestRate:0.05,crisis};
+          const resolution=resolveYear(state.country,state.pendingBudget,inputs);
+          next={...next,country:resolution.state,lastPassedBudget:state.pendingBudget,failedVotes:0,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:now+(state.year===1?15000:10000),result:{passed:true,yes,no,resolution},pendingBudget:null,voteChoices:{},votes:{},budgetDraft:null,version:next.version+1};
+          if(resolution.state.collapsed)next={...next,status:"finished",phase:"finished",phaseDeadline:null};
+        } else if(state.failedVotes===0) {
+          const pm=state.players.find(p=>p.id===state.players.filter(x=>!x.isBot)[(state.year)%humans.length]?.id) ?? humans[0];
+          next={...next,failedVotes:1,phase:"budget",phaseStartedAt:now,phaseDeadline:now+20000,pendingBudget:null,budgetDraft:null,voteChoices:{},votes:{},result:{passed:false,yes,no,redraftBy:pm?.id},version:next.version+1};
+        } else {
+          const fallback=state.lastPassedBudget ?? {shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment:12},borrowing:0};
+          const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
+          const resolution=resolveYear(state.country,fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true});
+          next={...next,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:now+(state.year===1?15000:10000),result:{passed:false,shutdown:true,yes,no,resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null,version:next.version+1};
+          if(resolution.state.collapsed)next={...next,status:"finished",phase:"finished",phaseDeadline:null};
+        }
+      }
+      const {error}=await db.from("game_rooms").update({game_state:next,status:next.status}).eq("id",room.id);
+      if(error)return jsonResponse({error:"Could not save vote."},500);
       return jsonResponse({state:publicState(next)});
     }
     if(body.action==="chat") {
