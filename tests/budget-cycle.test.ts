@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { createInitialState, defaultBudget } from '../src/engine/economy.js';
-import { makeCrisis } from '../src/engine/crises.js';
-import { createGameSetup } from '../src/engine/game.js';
-import { createGameFlow } from '../src/engine/game-flow.js';
+import { createInitialState, defaultBudget } from '../src/engine/economy.ts';
+import { makeCrisis } from '../src/engine/crises.ts';
+import { createGameSetup } from '../src/engine/game.ts';
+import { createGameFlow } from '../src/engine/game-flow.ts';
 import {
   advanceBudgetCycleAfterResolve,
   createBudgetCycle,
   submitBudgetForVote,
   submitBudgetVote,
-} from '../src/engine/budget-cycle.js';
-import type { YearInputs } from '../src/engine/types.js';
+} from '../src/engine/budget-cycle.ts';
+import type { YearInputs } from '../src/engine/types.ts';
 
 const inputs: YearInputs = {
   revenueTradeModifier: 0,
