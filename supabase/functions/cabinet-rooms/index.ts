@@ -304,10 +304,22 @@ export default {
     if(body.action==="ready") {
       if(!state||state.status!=="playing")return jsonResponse({error:"The game has not started."},409);
       const readyByPlayer={...state.readyByPlayer,[player.id]:true};
-      const next={...state,readyByPlayer,version:state.version+1};
-      const {error}=await db.from("game_rooms").update({game_state:next}).eq("id",room.id).eq("status","playing");
+      const humans=state.players.filter(p=>!p.isBot);
+      const everyoneReady=humans.length>0 && humans.every(p=>readyByPlayer[p.id]);
+      const minimumMs:Record<string,number>={headline:4000,clue:15000,budget:0,vote:0,result:0,guess:0};
+      const minimumElapsed=Date.now()-state.phaseStartedAt >= (minimumMs[state.phase] ?? 0);
+      const canSkip=everyoneReady && minimumElapsed && state.phaseDeadline!==null;
+      const next={...state,readyByPlayer,phaseDeadline:canSkip?Date.now():state.phaseDeadline,version:state.version+1};
+      const {data:updated,error}=await db.from("game_rooms").update({game_state:next})
+        .eq("id",room.id).eq("status","playing").eq("game_state->>version",String(state.version))
+        .select("game_state").maybeSingle();
       if(error)return jsonResponse({error:"Could not save ready status."},500);
-      return jsonResponse({state:publicState(next)});
+      if(!updated) {
+        const {data:latest,error:latestError}=await db.from("game_rooms").select("game_state").eq("id",room.id).maybeSingle();
+        if(latestError||!latest)return jsonResponse({error:"Could not reload game state."},500);
+        return jsonResponse({state:publicState(latest.game_state as LiteState)});
+      }
+      return jsonResponse({state:publicState(updated.game_state as LiteState)});
     }
     if(body.action==="budget") {
       if(!state || state.status!=="playing") return jsonResponse({error:"The game has not started."},409);
