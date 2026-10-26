@@ -25,6 +25,7 @@ type LiteGameState = {
   votes: Record<string, boolean>;
   result: unknown;
   lastActionAt: Record<string, number>;
+  chat?: unknown;
   country: unknown;
   lastPassedBudget: unknown;
   failedVotes: 0 | 1;
