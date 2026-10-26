@@ -161,7 +161,27 @@ export default {
     }
     if(body.action==="state") {
       if(!state)return jsonResponse({state:null,status:room.status});
-      return jsonResponse({state:publicState(state),status:room.status});
+      const now=Date.now();
+      let next=state;
+      if(state.status==="playing" && state.phaseDeadline!==null && now>=state.phaseDeadline) {
+        const phases: Record<string,string> = { headline:"clue", clue:"budget", budget:"vote", vote:"result", result:"headline", guess:"finished" };
+        const phase=phases[state.phase] ?? "headline";
+        let year=state.year;
+        let status=state.status as LiteState["status"];
+        if(state.phase==="result") {
+          if(year>=3) { next={...state,phase:"guess",phaseStartedAt:now,phaseDeadline:now+30000,readyByPlayer:{},version:state.version+1}; }
+          else { year++; next={...state,year,phase:"headline",phaseStartedAt:now,phaseDeadline:now+4000,readyByPlayer:{},budgetDraft:null,votes:{},version:state.version+1}; }
+        } else if(state.phase==="guess") {
+          status="finished";
+          next={...state,status,phase:"finished",phaseStartedAt:now,phaseDeadline:null,version:state.version+1};
+        } else {
+          const duration=phase==="clue"?(year===1?60000:30000):phase==="budget"?(year===1?40000:30000):phase==="vote"?(year===1?15000:10000):phase==="result"?(year===1?15000:10000):30000;
+          next={...state,phase,phaseStartedAt:now,phaseDeadline:now+duration,readyByPlayer:{},version:state.version+1};
+        }
+        const {error:updateError}=await db.from("game_rooms").update({game_state:next,status:next.status}).eq("id",room.id).eq("status","playing");
+        if(updateError)return jsonResponse({error:"Could not advance game phase."},500);
+      }
+      return jsonResponse({state:publicState(next),status:next.status});
     }
     if(body.action==="private") {
       if(!state)return jsonResponse({private:null});
