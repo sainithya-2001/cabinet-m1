@@ -1,6 +1,6 @@
 import './cabinet-lite.css';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Component, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react';
 import { projectYear } from './engine/economy.ts';
 import { makeCrisis } from './engine/crises.ts';
 import { sectorNeeds } from './engine/economy.ts';
@@ -20,6 +20,41 @@ type RoomInfo = {
   roomId: string;
   playerToken: string;
 };
+
+
+type GameScreenErrorBoundaryProps = { children: ReactNode };
+type GameScreenErrorBoundaryState = { error: Error | null };
+
+class GameScreenErrorBoundary extends Component<GameScreenErrorBoundaryProps, GameScreenErrorBoundaryState> {
+  state: GameScreenErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): GameScreenErrorBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('Cabinet game screen failed to render:', error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <section className="game-render-error" role="alert" aria-live="assertive">
+          <span className="section-kicker">THE HOUSE IS TEMPORARILY SUSPENDED</span>
+          <h2>The game screen hit a snag.</h2>
+          <p>Your room may still be active. Try rendering the screen again, or reload if the problem persists.</p>
+          <details>
+            <summary>Technical details</summary>
+            <pre>{this.state.error.message}</pre>
+          </details>
+          <button type="button" className="primary-button" onClick={() => this.setState({ error: null })}>Try again</button>
+          <button type="button" className="secondary-button" onClick={() => window.location.reload()}>Reload game</button>
+        </section>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function App() {
   const [playerName, setPlayerName] = useState('');
@@ -332,7 +367,7 @@ useEffect(() => { if (gameState?.phase !== 'budget') setBudgetPreview(gameState?
               </button></>}
 
 {!gameState && <button className="primary-button" onClick={handleStartGame} disabled={loading}>{loading ? 'Starting…' : 'Start game'}</button>}
-{gameState && <section className="live-game" aria-live="polite">
+{gameState && <GameScreenErrorBoundary><section className="live-game" aria-live="polite">
   <div className="live-topline"><strong className="room-code-chip">ROOM {room.roomCode}</strong><strong>YEAR {gameState.year} / 3</strong><strong className="phase-clock-mini">{secondsLeft===null?'—':secondsLeft+'s'}</strong><div className="indicator-gauges">{gameState.country&&([['economy','Economy',gameState.country.economy],['happiness','Happiness',gameState.country.happiness],['stability','Stability',gameState.country.stability],['environment','Environment',gameState.country.environment],['debt','Debt',gameState.country.debt]] as Array<[string,string,number]>).map(([key,label,value])=><div className="indicator-gauge" key={key}><span>{label} <b>{Math.round(value)}</b></span><i><span style={{width:Math.max(0,Math.min(100,value))+'%'}}/></i></div>)}</div></div><div className="phase-tracker">{(['clue','budget','vote','result'] as const).map((phase,index)=><div key={phase} className={'phase-step '+(gameState.phase===phase?'current':'')}><span>{index+1}</span><b>{({clue:'Clues',budget:'Budget',vote:'Vote',result:'Results'} as Record<string,string>)[phase]}</b></div>)}</div><div className="speaker-banner"><img src="/images/speaker-thunderbottom.webp" alt="Speaker Thunderbottom"/><div className="speaker-order-bubble"><strong>ORDER!</strong><span>{gameState.crisisId ? ({'outbreak':'Disease outbreak','floods':'Severe flooding','border-tension':'Border tensions','recession':'Economic recession','heatwave':'Extreme heatwave','teacher-strike':'Teachers on strike','cyberattack':'National cyberattack','housing-shortage':'Housing shortage','energy-price-spike':'Energy price spike','protests':'Nationwide protests','export-boom':'Export boom','tech-breakthrough':'Technology breakthrough'} as Record<string,string>)[gameState.crisisId] ?? 'Breaking national news' : (phaseCopy[gameState.phase]?.order ?? 'The House will come to order!')}</span></div></div><div className="phase-status"><div><span className="section-kicker">YEAR {gameState.year} OF 3 · {gameState.phase.toUpperCase()}</span><h2>{phaseCopy[gameState.phase]?.title ?? 'Cabinet in session'}</h2><p>{phaseCopy[gameState.phase]?.instruction ?? 'Follow the cabinet proceedings.'}</p></div></div>
   {gameState.phase === 'clue' && privateInfo && <div className="private-role classified-dossier"><h3>Your private dossier <span>CLASSIFIED</span></h3><p className="clue-report">{privateInfo.ministry === 'Finance' ? <>Treasury report: revenue is <strong>{privateInfo.trueValue}</strong>.</> : privateInfo.ministry === 'Health' ? <>Hospital report: {privateInfo.trueValue * 10} patients in corridors. Health needs <strong>{privateInfo.trueValue}</strong>.</> : privateInfo.ministry === 'Defense' ? <>Security briefing: Defense needs <strong>{privateInfo.trueValue}</strong>.</> : privateInfo.ministry === 'Education' ? <>School report: Education needs <strong>{privateInfo.trueValue}</strong>.</> : privateInfo.ministry === 'Environment' ? <>Climate report: Environment needs <strong>{privateInfo.trueValue}</strong>.</> : <>Industry report: Economy needs <strong>{privateInfo.trueValue}</strong>.</>}</p><p>Ministry: <strong>{privateInfo.ministry}</strong></p><p>Secret: <strong>{privateInfo.isMole ? 'Mole' : 'Cabinet member'}</strong></p>{gameState.phase === 'clue' && !gameState.publishedClues?.some(c => c.playerId === privateInfo.playerId && c.year === gameState.year) && <div className="publish-clue"><label htmlFor="clue-value">Publish my clue</label><input id="clue-value" type="number" min={privateInfo.ministry === 'Finance' ? 60 : 0} max={privateInfo.ministry === 'Finance' ? 140 : 60} value={clueDraft ?? privateInfo.trueValue} onChange={e=>setClueDraft(Number(e.target.value))}/><button className="secondary-button" onClick={handlePublishClue} disabled={clueDraft === null || !Number.isInteger(clueDraft)}>Publish clue</button></div>}</div>}
   {gameState.phase === 'guess' && <div className="mole-guess"><h3>Who is the Mole?</h3><p>Choose the player you suspect. Your guess is final.</p>{gameState.players.filter(p=>!p.isBot && p.id !== privateInfo?.playerId).map(p=><button key={p.id} className="secondary-button" onClick={()=>handleGuess(p.id)}>{p.name}</button>)}</div>}
@@ -395,7 +430,7 @@ useEffect(() => { if (gameState?.phase !== 'budget') setBudgetPreview(gameState?
   <button className="secondary-button ready-button" onClick={handleReady}>Ready — move on when everyone is ready</button>
   <section className="chamber-chat"><h3>Chamber chat</h3><div className="chat-log" aria-live="polite">{chatMessages.map(m=><article className="chat-entry" key={m.id}><img className="chat-portrait" src={"/images/"+((gameState.players.find(p=>p.id===m.playerId)?.isBot?({"Sir Nodsalot":"sir-nodsalot","Baroness Slowclap":"baroness-slowclap","Sir Reginald Filibuster":"sir-reginald-filibuster","The Hon. Member for Shouting":"hon-member-for-shouting","Minister Low-Battery":"minister-low-battery","The Paper-Tearer":"paper-tearer","Sir Point-of-Order":"sir-point-of-order","Lord Ribbon-Cutter":"lord-ribbon-cutter"} as Record<string,string>)[gameState.players.find(p=>p.id===m.playerId)?.name??""]:(gameState.players.findIndex(p=>p.id===m.playerId)%2===0?"human-avatar-1":"human-avatar-2"))??"human-avatar-1")+".webp"} alt=""/><div className="chat-copy"><strong>{m.name}</strong><p>{m.kind==='clue'&&<span className="chat-clue-badge">Clue</span>}{m.text}</p></div></article>)}</div></section>
   {!['vote','result','finished'].includes(gameState.phase) && <div className="join-row"><input value={chatText} maxLength={140} onChange={e=>setChatText(e.target.value)} placeholder="Message (140 characters max)"/><button className="secondary-button" onClick={handleSendChat} disabled={!chatText.trim()}>Send</button></div>}
-</section>}
+</section></GameScreenErrorBoundary>}
 
 {!gameState && <div className="room-players">
   <h3>Players in this room ({players.length})</h3>

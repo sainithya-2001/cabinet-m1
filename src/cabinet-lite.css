@@ -178,3 +178,11 @@ footer { max-width:1180px; margin:auto; padding:18px 24px; display:flex; justify
 @media(min-width:1000px){.live-game{display:grid;grid-template-columns:minmax(0,1fr) 300px;column-gap:14px}.live-game>.live-topline,.live-game>.phase-tracker,.live-game>.speaker-banner,.live-game>.phase-status,.live-game>.private-role,.live-game>.lite-budget,.live-game>.mole-guess,.live-game>.game-result,.live-game>.ready-button{grid-column:1}.live-game>.chamber-scene{grid-column:1;grid-row:6}.live-game>.chamber-chat{grid-column:2;grid-row:6 / span 2;position:sticky;top:12px;align-self:start;max-height:calc(100vh - 140px)}.live-game>.join-row{grid-column:2}.live-game>.phase-status{grid-row:4}.live-game>.speaker-banner{grid-row:3}.live-game>.phase-tracker{grid-row:2}.live-game>.live-topline{grid-row:1}}
 @media(max-width:999px){.live-game{display:flex;flex-direction:column}.chamber-chat{order:10;max-height:none}.chat-log{max-height:300px}.speaker-banner{align-items:center;flex-wrap:nowrap}.speaker-banner>b{display:none}}
 @media(max-width:700px){.app-shell.in-game{padding:0 8px 18px}.indicator-gauges{gap:4px}.indicator-gauge{font-size:.52rem}.phase-step{gap:4px;padding:6px 2px;font-size:.65rem}.phase-step>span{width:18px;height:18px}.speaker-banner>img{width:82px;height:82px}.speaker-order-bubble{padding:8px;max-width:calc(100% - 95px)}.speaker-order-bubble strong{font-size:1rem}.speaker-order-bubble span{font-size:.75rem}.cabinet-seats{grid-template-columns:repeat(2,minmax(0,1fr))}.cabinet-seat{min-height:160px}.cabinet-portrait{height:112px;max-width:130px}.cabinet-seat:last-child{grid-column:auto;width:auto}}
+
+.game-render-error{margin:18px auto;padding:22px;max-width:760px;border:3px double #a33b45;background:#fff8e9;color:#29231d;box-shadow:0 4px 0 #ddcbb0}
+.game-render-error h2{margin:8px 0;color:#8b2938;font-size:clamp(1.4rem,3vw,2rem)}
+.game-render-error p{line-height:1.5}
+.game-render-error details{margin:14px 0;padding:10px;background:#f1e5d0;border:1px solid #d2bea0}
+.game-render-error summary{cursor:pointer;font-weight:800}
+.game-render-error pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.85rem}
+.game-render-error button{margin:8px 8px 0 0}
