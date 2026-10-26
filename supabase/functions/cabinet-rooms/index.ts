@@ -291,7 +291,7 @@ export default {
                     if(yes>no) {
                       const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
                       const resolution=resolveYear(state.country,state.pendingBudget,{revenueTradeModifier:0,interestRate:0.05,crisis});
-                      next={...state,country:resolution.state,lastPassedBudget:state.pendingBudget,failedVotes:0,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:true,yes,no,resolution},pendingBudget:null,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
+                      next={...state,country:resolution.state,lastPassedBudget:state.pendingBudget,failedVotes:0,yearResolution:resolution,phase:resolution.state.collapsed?"finished":"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:resolution.state.collapsed?liteCollapseVerdict(true,resolution.state.collapseReasons,state.players.find(p=>p.isMole)?.name):{passed:true,yes,no,resolution},pendingBudget:null,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
                     } else if(state.failedVotes===0) {
                       // A failed first vote hands the redraft to the next seat, including bot seats.
                       const currentIndex=state.players.findIndex(p=>p.id===state.primeMinisterId);
@@ -308,7 +308,7 @@ export default {
                       const fallback=state.lastPassedBudget ?? fallbackEngineBudget();
                       const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
                       const resolution=resolveYear(state.country,fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true});
-                      next={...state,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:false,shutdown:true,yes,no,resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
+                      next={...state,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:resolution.state.collapsed?"finished":"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:resolution.state.collapsed?liteCollapseVerdict(true,resolution.state.collapseReasons,state.players.find(p=>p.isMole)?.name):{passed:false,shutdown:true,yes,no,resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
                     }
                   } else if(state.phase==="budget") {
                     // A PM who misses the drafting deadline triggers the same fallback path as a failed vote.
@@ -317,7 +317,7 @@ export default {
                     const fallback = liteDraftToBudget(usableDraft);
                     const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
                     const resolution=resolveYear(state.country ?? createInitialState(),fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true});
-                    next={...state,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:false,shutdown:true,reason:"Budget deadline expired",resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
+                    next={...state,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:resolution.state.collapsed?"finished":"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:resolution.state.collapsed?liteCollapseVerdict(true,resolution.state.collapseReasons,state.players.find(p=>p.isMole)?.name):{passed:false,shutdown:true,reason:"Budget deadline expired",resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
                   } else if(state.phase==="clue" && state.players.find(p=>p.id===state.primeMinisterId)?.isBot) {
                     // Bot PMs draft automatically; they must not trigger a fake missed-deadline shutdown.
                     const draft=botDraft(state);
