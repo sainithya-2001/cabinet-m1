@@ -1,5 +1,5 @@
-import { PARAMS_VERSION } from '../engine/index.js';
-import { runSimulation } from './simulation.js';
+import { PARAMS_VERSION } from '../engine/index.ts';
+import { runSimulation } from './simulation.ts';
 
 const seeds = Math.max(
   1,
