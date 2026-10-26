@@ -260,17 +260,20 @@ const [budgetDraft, setBudgetDraft] = useState({health:2,education:2,security:2,
 {gameState && <section className="live-game" aria-live="polite">
   <span className="section-kicker">YEAR {gameState.year} OF 3</span><h2>{gameState.phase.toUpperCase()}</h2>
   <p>Game status: {gameState.status}</p>
+  <p><strong>Prime Minister:</strong> {gameState.players.find(p=>p.id===gameState.primeMinisterId)?.name ?? '—'}{privateInfo?.playerId===gameState.primeMinisterId ? ' (you)' : ''}</p>
+  {gameState.country && <div className="country-indicators"><h3>Country indicators</h3><p>Economy {Math.round(gameState.country.economy)} · Happiness {Math.round(gameState.country.happiness)} · Stability {Math.round(gameState.country.stability)} · Environment {Math.round(gameState.country.environment)} · Debt {Math.round(gameState.country.debt)}</p></div>}
   {privateInfo && <div className="private-role"><h3>Your private role</h3><p>Ministry: <strong>{privateInfo.ministry}</strong></p><p>Secret: <strong>{privateInfo.isMole ? 'Mole' : 'Cabinet member'}</strong></p><p>{privateInfo.clue}</p></div>}
   {gameState.phase === 'guess' && <div className="mole-guess"><h3>Who is the Mole?</h3><p>Choose the player you suspect. Your guess is final.</p>{gameState.players.filter(p=>!p.isBot).map(p=><button key={p.id} className="secondary-button" onClick={()=>handleGuess(p.id)}>{p.name}</button>)}</div>}
   {gameState.phase === 'finished' && <div className="game-result"><h3>Game over</h3><pre>{JSON.stringify(gameState.result,null,2)}</pre></div>}
   {gameState.phase === 'budget' && <div className="lite-budget">
     <h3>Draft the ten-coin budget</h3>
+    {privateInfo?.playerId !== gameState.primeMinisterId && <p>Only the current Prime Minister can submit the budget.</p>}
     {(['health','education','security','environment','economy'] as const).map(line => <label key={line} style={{display:'flex',justifyContent:'space-between',gap:12,margin:'8px 0',textTransform:'capitalize'}}>{line}<select value={budgetDraft[line]} onChange={e=>setBudgetDraft(d=>({...d,[line]:Number(e.target.value)}))}>{Array.from({length:11},(_,n)=><option key={n} value={n}>{n} coin{n===1?'':'s'}</option>)}</select></label>)}
     <p>Coins allocated: {budgetDraft.health+budgetDraft.education+budgetDraft.security+budgetDraft.environment+budgetDraft.economy} / 10</p>
     <label>Borrowing <select value={budgetDraft.borrowing} onChange={e=>setBudgetDraft(d=>({...d,borrowing:Number(e.target.value) as 0|10|20}))}><option value={0}>0</option><option value={10}>10</option><option value={20}>20</option></select></label>
-    <button className="primary-button" onClick={handleSubmitBudget} disabled={budgetDraft.health+budgetDraft.education+budgetDraft.security+budgetDraft.environment+budgetDraft.economy!==10}>Submit budget</button>
+    <button className="primary-button" onClick={handleSubmitBudget} disabled={privateInfo?.playerId !== gameState.primeMinisterId || budgetDraft.health+budgetDraft.education+budgetDraft.security+budgetDraft.environment+budgetDraft.economy!==10}>Submit budget</button>
   </div>}
-  {gameState.phase === 'vote' && <div><h3>Vote on the budget</h3><button className="primary-button" onClick={()=>handleVote(true)}>Approve</button> <button className="secondary-button" onClick={()=>handleVote(false)}>Reject</button><p>Votes cast: {Object.keys(gameState.votes).length}</p></div>}
+  {gameState.phase === 'vote' && <div><h3>Vote on the budget</h3>{gameState.voteChoices?.[privateInfo?.playerId ?? ''] !== undefined ? <p>Your vote is recorded.</p> : <><button className="primary-button" onClick={()=>handleVote(true)}>Approve</button> <button className="secondary-button" onClick={()=>handleVote(false)}>Reject</button></>}<p>Votes cast: {Object.keys(gameState.votes).length}</p></div>}
   <h3>Cabinet seats</h3><ul>{gameState.players.map(p => <li key={p.id}>{p.name}{p.isBot ? ' · AI' : ''} — {p.ministry}</li>)}</ul>
   <button className="secondary-button" onClick={handleReady}>Ready</button>
   <h3>Cabinet chat</h3><ul>{gameState.chat.map(m => <li key={m.at + m.playerId}><strong>{m.name}:</strong> {m.text}</li>)}</ul>
