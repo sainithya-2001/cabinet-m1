@@ -1,4 +1,4 @@
-import type { Budget, Sector } from './types.js';
+import type { Budget, Sector } from './types.ts';
 
 export type LiteBudgetLine = 'health' | 'education' | 'security' | 'environment' | 'economy';
 export type LiteBudgetDraft = Record<LiteBudgetLine, number> & {
