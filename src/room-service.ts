@@ -86,3 +86,38 @@ export async function getRoomPlayers(
 
   return data.players as RoomPlayer[];
 }
+
+export type PublicGamePlayer = {
+  id: string; name: string; seat: number; isBot: boolean; ministry: string; ready: boolean;
+};
+export type PublicGameState = {
+  version: number; status: 'waiting' | 'playing' | 'finished'; createdAt: number;
+  phase: string; phaseStartedAt: number; phaseDeadline: number | null; year: number;
+  players: PublicGamePlayer[];
+  chat: Array<{ playerId: string; name: string; text: string; at: number }>;
+  budgetDraft: Record<string, number> | null; votes: Record<string, boolean>; result: unknown;
+};
+export type PrivateGameInfo = { ministry: string; isMole: boolean; clue: string };
+async function callGameAction<T>(roomId: string, playerToken: string, action: string, payload?: unknown): Promise<T> {
+  const { data, error } = await supabase.functions.invoke('cabinet-rooms', {
+    body: { action, roomId, playerToken, ...(payload === undefined ? {} : { payload }) },
+  });
+  if (error) throw new Error(error.message || 'Could not connect to the game server.');
+  if (!data || data.error) throw new Error(data?.error || 'The game server returned an invalid response.');
+  return data as T;
+}
+export async function startGame(roomId: string, playerToken: string) {
+  return callGameAction<{ state: PublicGameState; private: PrivateGameInfo }>(roomId, playerToken, 'start');
+}
+export async function getGameState(roomId: string, playerToken: string) {
+  return callGameAction<{ state: PublicGameState | null; status?: string }>(roomId, playerToken, 'state');
+}
+export async function getPrivateGameInfo(roomId: string, playerToken: string) {
+  return callGameAction<{ private: PrivateGameInfo | null }>(roomId, playerToken, 'private');
+}
+export async function markReady(roomId: string, playerToken: string) {
+  return callGameAction<{ state: PublicGameState }>(roomId, playerToken, 'ready');
+}
+export async function sendRoomChat(roomId: string, playerToken: string, text: string) {
+  return callGameAction<{ state: PublicGameState }>(roomId, playerToken, 'chat', { text });
+}
