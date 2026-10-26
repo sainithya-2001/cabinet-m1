@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { fromEngineBudget, toEngineBudget, validateLiteBudget } from './lite-budget.js';
-import { createLiteGameSetup } from './lite-setup.js';
+import { fromEngineBudget, toEngineBudget, validateLiteBudget } from './lite-budget.ts';
+import { createLiteGameSetup } from './lite-setup.ts';
 
 describe('Cabinet Lite budget adapter', () => {
   it('maps ten coins to the seven-sector engine budget without changing engine tuning', () => {
