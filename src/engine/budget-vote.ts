@@ -1,5 +1,5 @@
 
-import type { Budget } from './types.js';
+import type { Budget } from './types.ts';
 
 export interface BudgetVote {
   yes: number;
