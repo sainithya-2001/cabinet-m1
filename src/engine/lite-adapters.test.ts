@@ -45,6 +45,6 @@ describe('Cabinet Lite setup adapter', () => {
 
   it('rejects fewer than two or more than six humans', () => {
     expect(() => createLiteGameSetup(1, [{ id: 'a', name: 'A' }])).toThrow('2–6');
-    expect(() => createLiteGameSetup(1, Array.from({ length: 7 }, (_, i) => ({ id: String(i), name: `P${i}` }))).toThrow('2–6');
+    expect(() => createLiteGameSetup(1, Array.from({ length: 7 }, (_, i) => ({ id: String(i), name: `P${i}` })))).toThrow('2–6');
   });
 });
