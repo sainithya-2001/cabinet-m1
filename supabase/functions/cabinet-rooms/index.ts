@@ -300,7 +300,7 @@ export default {
                     // A PM who misses the drafting deadline triggers the same fallback path as a failed vote.
                     const currentDraft = state.budgetDraft;
                     const usableDraft = currentDraft && validateLiteBudget(currentDraft as LiteBudgetDraft).length === 0 ? currentDraft : fallbackLiteDraft();
-                    const fallback = state.lastPassedBudget ?? liteDraftToBudget(usableDraft);
+                    const fallback = liteDraftToBudget(usableDraft);
                     const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
                     const resolution=resolveYear(state.country ?? createInitialState(),fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true});
                     next={...state,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:false,shutdown:true,reason:"Budget deadline expired",resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
@@ -435,7 +435,7 @@ export default {
               if(pm?.isBot){const draft=botDraft({...latest,primeMinisterId:pm.id,failedVotes:1}), budget=liteDraftToBudget(draft), botChoices=botVoteChoices(latest);next={...next,failedVotes:1,primeMinisterId:pm.id,phase:"vote",phaseStartedAt:now,phaseDeadline:now+(latest.year===1?15000:10000),pendingBudget:budget,budgetDraft:draft,voteChoices:botChoices,votes:botChoices,result:{passed:false,yes,no,redraftBy:pm.id,botRedraft:true}};}
               else next={...next,failedVotes:1,primeMinisterId:pm?.id??null,phase:"budget",phaseStartedAt:now,phaseDeadline:now+20000,pendingBudget:null,budgetDraft:null,voteChoices:{},votes:{},result:{passed:false,yes,no,redraftBy:pm?.id}};
             } else {
-              const fallback=latest.lastPassedBudget??{shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment: 0},borrowing:0};
+              const fallback=latest.lastPassedBudget ?? fallbackEngineBudget();
               const resolution=resolveYear(latest.country,fallback,{revenueTradeModifier:0,interestRate:0.05,crisis:makeCrisis(latest.crisisId??CRISIS_TEMPLATES[0].id,2),shutdown:true});
               next={...next,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(latest.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:false,shutdown:true,yes,no,resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null};
             }
