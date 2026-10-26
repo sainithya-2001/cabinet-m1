@@ -1,4 +1,4 @@
-import type { CrisisCard, CrisisCategory } from './types.js';
+import type { CrisisCard, CrisisCategory } from './types.ts';
 
 export const CRISIS_CATEGORIES: CrisisCategory[] = ['Health', 'Disaster', 'Security', 'Economy', 'Climate', 'Social'];
 
