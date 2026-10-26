@@ -62,12 +62,13 @@ export function fromEngineBudget(budget: Budget): LiteBudgetDraft {
     ['economy', (budget.shares.infrastructure + budget.shares.industry) / 10],
   ];
 
+  const valuesByLine = Object.fromEntries(pairs) as Record<LiteBudgetLine, number>;
   const result: Record<LiteBudgetLine, number> = {
-    health: pairs[0][1],
-    education: pairs[1][1],
-    security: pairs[2][1],
-    environment: pairs[3][1],
-    economy: pairs[4][1],
+    health: valuesByLine.health,
+    education: valuesByLine.education,
+    security: valuesByLine.security,
+    environment: valuesByLine.environment,
+    economy: valuesByLine.economy,
   };
   if (pairs.some(([, value]) => !Number.isInteger(value))) {
     throw new Error('This engine budget cannot be represented by the Lite coin UI.');
