@@ -34,7 +34,7 @@ useEffect(() => {
 }, []);
 const phaseCopy: Record<string, {title:string; instruction:string}> = {
   headline: { title: 'The Speaker has the floor', instruction: 'Read the crisis bulletin. Your cabinet must act fast.' },
-  clue: { title: 'Trade clues and accusations', instruction: 'Read your private report, publish what you know, and argue in chat.' },
+  clue: { title: 'Trade clues and accusations', instruction: 'Read your private report, share what you know in chat, and challenge suspicious claims.' },
   budget: { title: 'The Prime Minister must allocate 10 coins', instruction: 'The PM drafts the budget. Everyone else: make your demands known.' },
   vote: { title: 'The cabinet must decide', instruction: 'Vote yes to pass this budget, or no to reject it.' },
   result: { title: 'The consequences are in', instruction: 'Review what your budget did to Veloria before the next year.' },
