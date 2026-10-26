@@ -1,10 +1,10 @@
 
 import { describe, expect, it } from 'vitest';
-import { defaultBudget } from '../src/engine/economy.js';
+import { defaultBudget } from '../src/engine/economy.ts';
 import {
   resolveBudgetAttempt,
   resolveBudgetVote,
-} from '../src/engine/budget-vote.js';
+} from '../src/engine/budget-vote.ts';
 
 describe('budget voting', () => {
   it('passes only when Yes exceeds No', () => {
