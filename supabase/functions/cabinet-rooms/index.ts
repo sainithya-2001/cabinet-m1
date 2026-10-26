@@ -304,8 +304,8 @@ export default {
                   } else {
                     const duration=phase==="clue"?(year===1?60000:30000):phase==="budget"?(year===1?40000:30000):phase==="vote"?(year===1?15000:10000):phase==="result"?(year===1?15000:10000):30000;
                     next={...state,phase,phaseStartedAt:now,phaseDeadline:now+duration,readyByPlayer:{},version:state.version+1};
-            
-          }
+                  }
+            }
           return {state:next,status:next.status,changed:true};
         });
         return jsonResponse({state:publicState(saved.state),status:saved.status});
