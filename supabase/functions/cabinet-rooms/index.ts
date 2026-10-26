@@ -1,4 +1,4 @@
-import { createInitialState, resolveYear } from "../../../src/engine/economy.ts";
+import { calculateYearFinances, createInitialState, defaultBudget, resolveYear, sectorNeeds } from "../../../src/engine/economy.ts";
 import { makeCrisis, CRISIS_TEMPLATES } from "../../../src/engine/crises.ts";
 import type { Budget, CountryState, YearInputs } from "../../../src/engine/types.ts";
 import { mutateVersionedState } from "../../../src/engine/versioned-mutation.ts";
@@ -78,6 +78,18 @@ function makePrivateClue(ministry: string): string {
   return clues[ministry] ?? "Watch the budget and look for inconsistencies in other ministers' claims.";
 }
 function publicState(state: LiteState) { return toPublicGameState(state); }
+function trueClueValue(ministry: string, country: CountryState, crisisId: string): number {
+  const crisis = makeCrisis(crisisId, 2);
+  const inputs: YearInputs = { revenueTradeModifier: 0, interestRate: 0.05, crisis };
+  if (ministry === "Finance") return calculateYearFinances(country, defaultBudget(), inputs).revenue;
+  const needs = sectorNeeds(inputs);
+  if (ministry === "Health") return needs.health;
+  if (ministry === "Defense") return needs.security;
+  if (ministry === "Education") return needs.education;
+  if (ministry === "Environment") return needs.environment;
+  if (ministry === "Economy") return needs.industry + needs.infrastructure;
+  return 0;
+}
 async function findPlayer(db: Db, roomId: string, token: string) {
   const tokenHash = await hashToken(token);
   const { data: player, error } = await db.from("game_players").select("id,player_name,joined_at,player_token_hash").eq("room_id", roomId).eq("player_token_hash", tokenHash).maybeSingle();
@@ -134,11 +146,11 @@ function initialLiteState(players: PlayerRow[]): LiteState {
     id: item.row.id, name: item.row.player_name, seat, isBot: item.isBot,
     ministry: ministries[seat], isMole: seat === moleIndex, ready: false,
   }));
+  const initialCountry = createInitialState();
+  const initialCrisisId = CRISIS_TEMPLATES[crypto.getRandomValues(new Uint32Array(1))[0] % CRISIS_TEMPLATES.length].id;
   const privateByPlayer: LiteState["privateByPlayer"] = {};
   for (const player of gamePlayers) {
-    const trueValue = player.ministry === "Finance"
-      ? 60 + (crypto.getRandomValues(new Uint32Array(1))[0] % 81)
-      : crypto.getRandomValues(new Uint32Array(1))[0] % 61;
+    const trueValue = trueClueValue(player.ministry, initialCountry, initialCrisisId);
     privateByPlayer[player.id] = {
       ministry: player.ministry, isMole: player.isMole, trueValue,
       clue: player.isMole ? "You are the Mole. Secretly undermine the government without revealing yourself." : makePrivateClue(player.ministry),
@@ -154,8 +166,8 @@ function initialLiteState(players: PlayerRow[]): LiteState {
     phaseStartedAt: Date.now(), phaseDeadline: Date.now() + 4000, year: 1,
     players: ordered, privateByPlayer, publishedClues: [], readyByPlayer: {},
     budgetDraft: null, votes: {}, result: null, lastActionAt: {},
-    country: createInitialState(), lastPassedBudget: null, failedVotes: 0,
-    pendingBudget: null, voteChoices: {}, crisisId: CRISIS_TEMPLATES[crypto.getRandomValues(new Uint32Array(1))[0] % CRISIS_TEMPLATES.length].id, yearResolution: null,
+    country: initialCountry, lastPassedBudget: null, failedVotes: 0,
+    pendingBudget: null, voteChoices: {}, crisisId: initialCrisisId, yearResolution: null,
     primeMinisterId: ordered.find(p => !p.isBot)?.id ?? null, guesses: {}, botPlan: {},
   };
 }
@@ -269,14 +281,14 @@ export default {
                         next={...state,failedVotes:1,primeMinisterId:pm?.id ?? null,phase:"budget",phaseStartedAt:now,phaseDeadline:now+20000,pendingBudget:null,budgetDraft:null,voteChoices:{},votes:{},result:{passed:false,yes,no,redraftBy:pm?.id},version:state.version+1};
                       }
                     } else {
-                      const fallback=state.lastPassedBudget ?? {shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment:12},borrowing:0};
+                      const fallback=state.lastPassedBudget ?? {shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment:0},borrowing:0};
                       const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
                       const resolution=resolveYear(state.country,fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true});
                       next={...state,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:false,shutdown:true,yes,no,resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
                     }
                   } else if(state.phase==="budget") {
                     // A PM who misses the drafting deadline triggers the same fallback path as a failed vote.
-                    const fallback=state.lastPassedBudget ?? {shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment:12},borrowing:0};
+                    const fallback=state.lastPassedBudget ?? {shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment: 0},borrowing:0};
                     const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
                     const resolution=resolveYear(state.country ?? createInitialState(),fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true});
                     next={...state,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(state.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:false,shutdown:true,reason:"Budget deadline expired",resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null,version:state.version+1};
@@ -297,9 +309,7 @@ export default {
                       for (const minister of state.players) {
                         const previous = privateByPlayer[minister.id];
                         if (!previous) continue;
-                        const trueValue = minister.ministry === "Finance"
-                          ? 60 + (crypto.getRandomValues(new Uint32Array(1))[0] % 81)
-                          : crypto.getRandomValues(new Uint32Array(1))[0] % 61;
+                        const trueValue = state.country && state.crisisId ? trueClueValue(minister.ministry, state.country, state.crisisId) : previous.trueValue;
                         privateByPlayer[minister.id] = { ...previous, trueValue };
                       }
                       next={...state,year,privateByPlayer,primeMinisterId:nextPm?.id ?? state.players[0]?.id ?? null,phase:"headline",phaseStartedAt:now,phaseDeadline:now+4000,readyByPlayer:{},budgetDraft:null,votes:{},voteChoices:{},pendingBudget:null,failedVotes:0,version:state.version+1};
@@ -337,7 +347,7 @@ export default {
         });
         const published=saved.state.publishedClues.find(c=>c.playerId===player.id&&c.year===saved.state.year);
         if(!published) throw new Error("Published clue was not saved.");
-        const message={playerId:player.id,name:player.player_name,text:`${published.ministry}: ${published.ministry==="Finance"?"revenue is":"need is"} ${published.value}`,at:published.at,kind:"clue"};
+        const message={id:player.id+":"+published.year+":"+published.at,playerId:player.id,name:player.player_name,text:`${published.ministry}: ${published.ministry==="Finance"?"revenue is":"need is"} ${published.value}`,at:published.at,kind:"clue"};
         try { const sent=await db.channel("cabinet-chat:"+room.id).send({type:"broadcast",event:"chat-message",payload:message}); if(sent==="error") throw new Error("Could not broadcast clue."); }
         catch(e) { console.error("Clue chat broadcast failed:",e); }
         return jsonResponse({state:publicState(saved.state),message});
@@ -405,7 +415,7 @@ export default {
               if(pm?.isBot){const draft=botDraft({...latest,primeMinisterId:pm.id,failedVotes:1}), budget=liteDraftToBudget(draft), botChoices=botVoteChoices(latest);next={...next,failedVotes:1,primeMinisterId:pm.id,phase:"vote",phaseStartedAt:now,phaseDeadline:now+(latest.year===1?15000:10000),pendingBudget:budget,budgetDraft:draft,voteChoices:botChoices,votes:botChoices,result:{passed:false,yes,no,redraftBy:pm.id,botRedraft:true}};}
               else next={...next,failedVotes:1,primeMinisterId:pm?.id??null,phase:"budget",phaseStartedAt:now,phaseDeadline:now+20000,pendingBudget:null,budgetDraft:null,voteChoices:{},votes:{},result:{passed:false,yes,no,redraftBy:pm?.id}};
             } else {
-              const fallback=latest.lastPassedBudget??{shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment:12},borrowing:0};
+              const fallback=latest.lastPassedBudget??{shares:{health:20,education:14,security:14,infrastructure:16,environment:10,industry:14,debtRepayment: 0},borrowing:0};
               const resolution=resolveYear(latest.country,fallback,{revenueTradeModifier:0,interestRate:0.05,crisis:makeCrisis(latest.crisisId??CRISIS_TEMPLATES[0].id,2),shutdown:true});
               next={...next,country:resolution.state,lastPassedBudget:fallback,yearResolution:resolution,phase:"result",phaseStartedAt:now,phaseDeadline:resolution.state.collapsed?null:now+(latest.year===1?15000:10000),status:resolution.state.collapsed?"finished":"playing",result:{passed:false,shutdown:true,yes,no,resolution},pendingBudget:null,failedVotes:0,voteChoices:{},votes:{},budgetDraft:null};
             }
@@ -437,7 +447,7 @@ export default {
       const text=payload.text.trim();if(!text||text.length>140)return jsonResponse({error:"Messages must be 1–140 characters."},400);
       if(!state||state.status!=="playing"||room.status!=="playing")return jsonResponse({error:"The game has not started."},409);
       if(["vote","result","finished"].includes(state.phase))return jsonResponse({error:"Chat is closed during voting and results."},409);
-      const message={playerId:player.id,name:player.player_name,text,at:Date.now()};
+      const message={id:crypto.randomUUID(),playerId:player.id,name:player.player_name,text,at:Date.now()};
       try {
         const channel=db.channel("cabinet-chat:"+room.id);
         const sent=await channel.send({type:"broadcast",event:"chat-message",payload:message});

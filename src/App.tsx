@@ -1,6 +1,11 @@
 import './cabinet-lite.css';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { projectYear } from './engine/economy.ts';
+import { makeCrisis } from './engine/crises.ts';
+import { sectorNeeds } from './engine/economy.ts';
+import { toEngineBudget, type LiteBudgetDraft } from './engine/lite-budget.ts';
+import type { CountryState, Indicator } from './engine/types.ts';
 import {
   createRoom,
   joinRoom,
@@ -9,6 +14,7 @@ import {
   startGame, getGameState, getPrivateGameInfo, markReady, sendRoomChat, submitLiteBudget, castBudgetVote, submitMoleGuess,
   type PublicGameState, type PrivateGameInfo, type RoomChatMessage, subscribeRoomChat, publishMyClue, subscribeBudgetPreview, sendBudgetPreview,
 } from './room-service.ts';
+type ResultResolutionView = { changes: Record<Indicator, { before: number; after: number; lines: Array<{ cause: string; rounded: number }> }>; state: Record<Indicator, number>; spending: Record<string, number>; effectiveBudget: { shares: Record<string, number>; borrowing: number }; interest: number; revenue: number };
 type RoomInfo = {
   roomCode: string;
   roomId: string;
@@ -45,6 +51,27 @@ const phaseCopy: Record<string, {title:string; instruction:string}> = {
   finished: { title: 'The Veloria Times', instruction: 'Read the final verdict and see who spotted the liar.' },
 };
 const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.ceil((gameState.phaseDeadline - clockNow) / 1000));
+const shownBudget = privateInfo?.playerId === gameState?.primeMinisterId ? budgetDraft : (budgetPreview ?? gameState?.budgetDraft ?? budgetDraft);
+const projectedEffects = useMemo(() => {
+  if (gameState?.phase !== 'budget' || !gameState.country || !gameState.crisisId) return null;
+  try {
+    const engineBudget = toEngineBudget({
+      health: Number(shownBudget.health), education: Number(shownBudget.education),
+      security: Number(shownBudget.security), environment: Number(shownBudget.environment),
+      economy: Number(shownBudget.economy), borrowing: Number(shownBudget.borrowing) as 0 | 10 | 20,
+    } as LiteBudgetDraft);
+    const range = projectYear(gameState.country as CountryState, engineBudget, {
+      revenueMin: 60, revenueMax: 140,
+      baseInputs: { revenueTradeModifier: 0, interestRate: 0.05 },
+      crisisForSeverity: severity => makeCrisis(gameState.crisisId!, severity),
+    });
+    const indicators: Indicator[] = ['economy', 'happiness', 'stability', 'environment', 'debt'];
+    return Object.fromEntries(indicators.map(indicator => [
+      indicator,
+      { min: Math.round(range.min[indicator] - gameState.country![indicator]), max: Math.round(range.max[indicator] - gameState.country![indicator]) },
+    ])) as Record<Indicator, { min: number; max: number }>;
+  } catch { return null; }
+}, [gameState?.phase, gameState?.year, gameState?.country, gameState?.crisisId, shownBudget.health, shownBudget.education, shownBudget.security, shownBudget.environment, shownBudget.economy, shownBudget.borrowing]);
 useEffect(() => { if (gameState?.phase !== 'budget') setBudgetPreview(gameState?.budgetDraft ?? null); }, [gameState?.phase, gameState?.year]);
 
 
@@ -94,7 +121,7 @@ useEffect(() => { if (gameState?.phase !== 'budget') setBudgetPreview(gameState?
     setChatMessages([]);
     if (!room) return;
     const unsubscribeChat = subscribeRoomChat(room.roomId, message => {
-      setChatMessages(current => current.some(item => item.at === message.at && item.playerId === message.playerId) ? current : [...current, message].slice(-100));
+      setChatMessages(current => current.some(item => item.id === message.id) ? current : [...current, message].slice(-100));
     });
     const unsubscribeBudget = subscribeBudgetPreview(room.roomId, draft => setBudgetPreview(draft));
     return () => { unsubscribeChat(); unsubscribeBudget(); };
@@ -148,7 +175,7 @@ useEffect(() => { if (gameState?.phase !== 'budget') setBudgetPreview(gameState?
       const r = await publishMyClue(room.roomId, room.playerToken, clueDraft);
       setGameState(r.state);
       setClueDraft(null);
-      if (r.message && !chatMessages.some(item => item.at === r.message.at && item.playerId === r.message.playerId)) setChatMessages(current => [...current, r.message].slice(-100));
+      if (r.message) setChatMessages(current => current.some(item => item.id === r.message.id) ? current : [...current, r.message].slice(-100));
       setMessage('Clue published to cabinet chat.');
     } catch (e) { setMessage(e instanceof Error ? e.message : 'Could not publish clue.'); }
   }
@@ -161,7 +188,7 @@ useEffect(() => { if (gameState?.phase !== 'budget') setBudgetPreview(gameState?
   }
   async function handleSendChat() {
     if (!room) return;
-    try { const r = await sendRoomChat(room.roomId, room.playerToken, chatText); setChatMessages(current => [...current, r.message].slice(-100)); setChatText(''); }
+    try { const r = await sendRoomChat(room.roomId, room.playerToken, chatText); setChatMessages(current => current.some(item => item.id === r.message.id) ? current : [...current, r.message].slice(-100)); setChatText(''); }
     catch (e) { setMessage(e instanceof Error ? e.message : 'Could not send message.'); }
   }
 
@@ -311,14 +338,56 @@ useEffect(() => { if (gameState?.phase !== 'budget') setBudgetPreview(gameState?
   {gameState.country && <div className="country-indicators"><h3>Country indicators</h3><p>Economy {Math.round(gameState.country.economy)} · Happiness {Math.round(gameState.country.happiness)} · Stability {Math.round(gameState.country.stability)} · Environment {Math.round(gameState.country.environment)} · Debt {Math.round(gameState.country.debt)}</p></div>}
   {privateInfo && <div className="private-role"><h3>Your private report</h3><p className="clue-report">{privateInfo.ministry === 'Finance' ? <>Treasury report: revenue is <strong>{privateInfo.trueValue}</strong>.</> : privateInfo.ministry === 'Health' ? <>Hospital report: {privateInfo.trueValue * 10} patients in corridors. Health needs <strong>{privateInfo.trueValue}</strong>.</> : privateInfo.ministry === 'Defense' ? <>Security briefing: Defense needs <strong>{privateInfo.trueValue}</strong>.</> : privateInfo.ministry === 'Education' ? <>School report: Education needs <strong>{privateInfo.trueValue}</strong>.</> : privateInfo.ministry === 'Environment' ? <>Climate report: Environment needs <strong>{privateInfo.trueValue}</strong>.</> : <>Industry report: Economy needs <strong>{privateInfo.trueValue}</strong>.</>}</p><p>Ministry: <strong>{privateInfo.ministry}</strong></p><p>Secret: <strong>{privateInfo.isMole ? 'Mole' : 'Cabinet member'}</strong></p>{gameState.phase === 'clue' && !gameState.publishedClues?.some(c => c.playerId === privateInfo.playerId && c.year === gameState.year) && <div className="publish-clue"><label htmlFor="clue-value">Publish my clue</label><input id="clue-value" type="number" min={privateInfo.ministry === 'Finance' ? 60 : 0} max={privateInfo.ministry === 'Finance' ? 140 : 60} value={clueDraft ?? privateInfo.trueValue} onChange={e=>setClueDraft(Number(e.target.value))}/><button className="secondary-button" onClick={handlePublishClue} disabled={clueDraft === null || !Number.isInteger(clueDraft)}>Publish clue</button></div>}</div>}
   {gameState.phase === 'guess' && <div className="mole-guess"><h3>Who is the Mole?</h3><p>Choose the player you suspect. Your guess is final.</p>{gameState.players.filter(p=>!p.isBot && p.id !== privateInfo?.playerId).map(p=><button key={p.id} className="secondary-button" onClick={()=>handleGuess(p.id)}>{p.name}</button>)}</div>}
-  {gameState.phase === 'finished' && <div className="game-result"><h3>Game over</h3><pre>{JSON.stringify(gameState.result,null,2)}</pre></div>}
+  {(gameState.phase === 'result' || gameState.phase === 'finished') && (() => {
+    const result = gameState.result as { passed?: boolean; shutdown?: boolean; resolution?: ResultResolutionView } | null;
+    const resolution = (result?.resolution ?? gameState.yearResolution) as ResultResolutionView | null;
+    if (!resolution?.changes) return gameState.phase === 'finished' ? <div className="game-result"><h3>Game over</h3><pre>{JSON.stringify(gameState.result,null,2)}</pre></div> : null;
+    const indicators: Array<[Indicator, string]> = [['economy','Economy'],['happiness','Happiness'],['stability','Stability'],['environment','Environment'],['debt','Debt']];
+    const allLines = indicators.flatMap(([key]) => resolution.changes[key]?.lines ?? []);
+    const biggest = allLines.filter(line => line.rounded !== 0).sort((a,b) => Math.abs(b.rounded)-Math.abs(a.rounded))[0];
+    const headline = result?.shutdown ? 'GOVERNMENT SHUTDOWN: THE COUNTRY PAYS THE PRICE' : biggest ? biggest.cause.toUpperCase() + ' SHAPES THIS YEAR\'S OUTCOME' : 'VELORIA HOLDS ITS BREATH';
+    const crisis = gameState.crisisId ?? '';
+    const budgetShares = resolution.effectiveBudget?.shares ?? {};
+    const needs = sectorNeeds({ revenueTradeModifier: 0, interestRate: 0.05, crisis: makeCrisis(crisis || 'protests', 2) });
+    const underfundedCrisis =
+      (crisis === 'outbreak' && resolution.spending.health < needs.health) ||
+      (crisis === 'floods' && resolution.spending.infrastructure < needs.infrastructure) ||
+      ((crisis === 'border-tension' || crisis === 'cyberattack' || crisis === 'protests') && resolution.spending.security < needs.security) ||
+      (crisis === 'teacher-strike' && resolution.spending.education < needs.education) ||
+      (crisis === 'heatwave' && resolution.spending.environment < needs.environment) ||
+      (crisis === 'energy-price-spike' && resolution.spending.industry < needs.industry);
+    const environmentLines = resolution.changes.environment?.lines ?? [];
+    const pollution = environmentLines.find(line => line.cause === 'Industry pollution');
+    const otherEnvironmentDamage = environmentLines.filter(line => line.cause !== 'Industry pollution').reduce((sum,line) => sum + Math.max(0,-line.rounded),0);
+    const note = result?.shutdown ? 'When governments cannot agree on a budget, services are cut while they argue.' :
+      underfundedCrisis ? 'Crises cost more when the system was already stretched: preparedness matters.' :
+      resolution.effectiveBudget?.borrowing > 0 ? 'Borrowing helps now, but interest takes money from future budgets.' :
+      resolution.interest > 5 ? 'The interest bill is now competing with hospitals and schools.' :
+      pollution && -pollution.rounded > otherEnvironmentDamage ? 'Pollution is a real cost that is not on the factory’s bill.' :
+      resolution.spending.education > needs.education ? 'Education pays back, but years later, which makes it easy to cut.' :
+      Object.keys(needs).some(sector => resolution.spending[sector] > needs[sector as keyof typeof needs] * 1.5) ? 'Each extra coin did less than the last: funding has diminishing returns.' :
+      resolution.revenue < 90 || resolution.revenue > 110 ? 'Governments budget with forecasts, not certainties: revenue can differ from expectations.' :
+      'Governments budget with forecasts, not certainties: revenue and needs can vary.';
+    return <div className="game-result">
+      <h3>{gameState.phase === 'finished' ? 'Game over' : 'What changed — and why'}</h3><h4 className="result-headline">{headline}</h4>
+      {indicators.map(([key,label]) => {
+        const change = resolution.changes[key]; const delta = change.after - change.before;
+        return <section className="indicator-breakdown" key={key}>
+          <h4>{label} {delta > 0 ? '+' : ''}{delta} <span>({change.before} → {change.after})</span></h4>
+          <ul>{change.lines.map((line,index) => <li key={line.cause + index}>{line.cause}: {line.rounded > 0 ? '+' : ''}{line.rounded}</li>)}</ul>
+          <p>Cause total: {change.lines.reduce((sum,line)=>sum+line.rounded,0)} (change: {delta})</p>
+        </section>;
+      })}
+      <section className="real-world-note"><h4>Real world note</h4><p>{note}</p></section>
+    </div>;
+  })()}
   {gameState.phase === 'budget' && <div className="lite-budget">
     <h3>Draft the ten-coin budget</h3>
     {privateInfo?.playerId !== gameState.primeMinisterId && <p>Only the current Prime Minister can submit the budget.</p>}
     {(['health','education','security','environment','economy'] as const).map(line => { const pm = privateInfo?.playerId === gameState.primeMinisterId; const shown = pm ? budgetDraft : (budgetPreview ?? gameState.budgetDraft ?? budgetDraft); const total = shown.health+shown.education+shown.security+shown.environment+shown.economy; return <div className="coin-row" key={line}><span>{line}</span><div className="coin-controls">{pm ? <><button type="button" className="coin-button" aria-label={`Remove one ${line} coin`} onClick={()=>handleBudgetDraftChange({...budgetDraft,[line]:Math.max(0,budgetDraft[line]-1)})} disabled={budgetDraft[line]===0}>−</button><strong aria-live="polite">{shown[line]}</strong><button type="button" className="coin-button" aria-label={`Add one ${line} coin`} onClick={()=>handleBudgetDraftChange(d=>{const sum=d.health+d.education+d.security+d.environment+d.economy;return sum>=10?d:{...d,[line]:d[line]+1}})} disabled={total>=10}>+</button></> : <strong aria-live="polite">{shown[line]}</strong>}</div></div>})}
     <p>Coins allocated: {(privateInfo?.playerId === gameState.primeMinisterId ? budgetDraft : (budgetPreview ?? gameState.budgetDraft ?? budgetDraft)).health+(privateInfo?.playerId === gameState.primeMinisterId ? budgetDraft : (budgetPreview ?? gameState.budgetDraft ?? budgetDraft)).education+(privateInfo?.playerId === gameState.primeMinisterId ? budgetDraft : (budgetPreview ?? gameState.budgetDraft ?? budgetDraft)).security+(privateInfo?.playerId === gameState.primeMinisterId ? budgetDraft : (budgetPreview ?? gameState.budgetDraft ?? budgetDraft)).environment+(privateInfo?.playerId === gameState.primeMinisterId ? budgetDraft : (budgetPreview ?? gameState.budgetDraft ?? budgetDraft)).economy} / 10</p>
     {privateInfo?.playerId === gameState.primeMinisterId ? <label>Borrowing <select value={budgetDraft.borrowing} onChange={e=>handleBudgetDraftChange({...budgetDraft,borrowing:Number(e.target.value) as 0|10|20})}><option value={0}>0</option><option value={10}>10</option><option value={20}>20</option></select></label> : <p>Borrowing: {(budgetPreview ?? gameState.budgetDraft ?? budgetDraft).borrowing ?? 0}</p>}
-    <div className="predicted-effects"><h4>Predicted effects (ranges)</h4><p>Health: {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).health*2-2)} to {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).health*2+2)}</p><p>Education: {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).education-2)} to {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).education+2)}</p><p>Security: {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).security-2)} to {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).security+2)}</p><p>Environment: {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).environment-2)} to {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).environment+2)}</p><p>Economy: {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).economy-2)} to {((budgetPreview ?? gameState.budgetDraft ?? budgetDraft).economy+2)}</p></div>
+    <div className="predicted-effects"><h4>Predicted indicator effects (ranges)</h4>{projectedEffects ? Object.entries({economy:'Economy',happiness:'Happiness',stability:'Stability',environment:'Environment',debt:'Debt'} as Record<Indicator,string>).map(([key,label])=>{const range=projectedEffects[key as Indicator];return <p key={key}>{label}: {range.min>0?'+':''}{range.min} to {range.max>0?'+':''}{range.max}</p>}) : <p>Projection unavailable for this draft.</p>}<small>Engine projection across public revenue, crisis-severity and interest-rate ranges.</small></div>
     <button className="primary-button" onClick={handleSubmitBudget} disabled={privateInfo?.playerId !== gameState.primeMinisterId || budgetDraft.health+budgetDraft.education+budgetDraft.security+budgetDraft.environment+budgetDraft.economy!==10}>Submit budget</button>
   </div>}
   {gameState.phase === 'vote' && <div><h3>Vote on the budget</h3>{gameState.voteChoices?.[privateInfo?.playerId ?? ''] !== undefined ? <p>Your vote is recorded.</p> : <><button className="primary-button" onClick={()=>handleVote(true)}>Approve</button> <button className="secondary-button" onClick={()=>handleVote(false)}>Reject</button></>}<p>Votes cast: {Object.keys(gameState.votes).length}</p></div>}
