@@ -26,6 +26,22 @@ const [gameState, setGameState] = useState<PublicGameState | null>(null);
 const [privateInfo, setPrivateInfo] = useState<PrivateGameInfo | null>(null);
 const [chatText, setChatText] = useState('');
 const [budgetDraft, setBudgetDraft] = useState({health:2,education:2,security:2,environment:2,economy:2,borrowing:0 as 0|10|20});
+const [showRules, setShowRules] = useState(false);
+const [clockNow, setClockNow] = useState(Date.now());
+useEffect(() => {
+  const id = window.setInterval(() => setClockNow(Date.now()), 500);
+  return () => window.clearInterval(id);
+}, []);
+const phaseCopy: Record<string, {title:string; instruction:string}> = {
+  headline: { title: 'The Speaker has the floor', instruction: 'Read the crisis bulletin. Your cabinet must act fast.' },
+  clue: { title: 'Trade clues and accusations', instruction: 'Read your private report, publish what you know, and argue in chat.' },
+  budget: { title: 'The Prime Minister must allocate 10 coins', instruction: 'The PM drafts the budget. Everyone else: make your demands known.' },
+  vote: { title: 'The cabinet must decide', instruction: 'Vote yes to pass this budget, or no to reject it.' },
+  result: { title: 'The consequences are in', instruction: 'Review what your budget did to Veloria before the next year.' },
+  guess: { title: 'Unmask the Mole', instruction: 'Choose the minister you suspect. Your accusation is final.' },
+  finished: { title: 'The Veloria Times', instruction: 'Read the final verdict and see who spotted the liar.' },
+};
+const secondsLeft = gameState?.phaseDeadline == null ? null : Math.max(0, Math.ceil((gameState.phaseDeadline - clockNow) / 1000));
 
 
   useEffect(() => {
@@ -167,7 +183,7 @@ const [budgetDraft, setBudgetDraft] = useState({health:2,education:2,security:2,
           <span className="brand-icon">C</span>
           CABINET
         </div>
-        <span className="topbar-label">THE POLITICAL STRATEGY GAME</span>
+        <div className="topbar-tools"><span className="topbar-label">THE POLITICAL STRATEGY GAME</span><button className="rules-trigger" onClick={() => setShowRules(true)} aria-label="How to play">? How to play</button></div>
       </nav>
 
       <section className="hero">
@@ -258,7 +274,7 @@ const [budgetDraft, setBudgetDraft] = useState({health:2,education:2,security:2,
 
 {!gameState && <button className="primary-button" onClick={handleStartGame} disabled={loading}>{loading ? 'Starting…' : 'Start game'}</button>}
 {gameState && <section className="live-game" aria-live="polite">
-  <span className="section-kicker">YEAR {gameState.year} OF 3</span><h2>{gameState.phase.toUpperCase()}</h2>
+  <div className="phase-status"><div><span className="section-kicker">YEAR {gameState.year} OF 3 · {gameState.phase.toUpperCase()}</span><h2>{phaseCopy[gameState.phase]?.title ?? 'Cabinet in session'}</h2><p>{phaseCopy[gameState.phase]?.instruction ?? 'Follow the cabinet proceedings.'}</p></div><div className="phase-clock" aria-live="polite">{secondsLeft === null ? '—' : `${secondsLeft}s`}<span>LEFT</span></div></div>
   {gameState.crisisId && <div className="crisis-headline"><span className="section-kicker">NATIONAL HEADLINE</span><h3>{({'outbreak':'Disease outbreak','floods':'Severe flooding','border-tension':'Border tensions','recession':'Economic recession','heatwave':'Extreme heatwave','teacher-strike':'Teachers on strike','cyberattack':'National cyberattack','housing-shortage':'Housing shortage','energy-price-spike':'Energy price spike','protests':'Nationwide protests','export-boom':'Export boom','tech-breakthrough':'Technology breakthrough'} as Record<string,string>)[gameState.crisisId] ?? 'Breaking national news'}</h3></div>}
   <p>Game status: {gameState.status}</p>
   <p><strong>Prime Minister:</strong> {gameState.players.find(p=>p.id===gameState.primeMinisterId)?.name ?? '—'}{privateInfo?.playerId===gameState.primeMinisterId ? ' (you)' : ''}</p>
@@ -269,17 +285,18 @@ const [budgetDraft, setBudgetDraft] = useState({health:2,education:2,security:2,
   {gameState.phase === 'budget' && <div className="lite-budget">
     <h3>Draft the ten-coin budget</h3>
     {privateInfo?.playerId !== gameState.primeMinisterId && <p>Only the current Prime Minister can submit the budget.</p>}
-    {(['health','education','security','environment','economy'] as const).map(line => <label key={line} style={{display:'flex',justifyContent:'space-between',gap:12,margin:'8px 0',textTransform:'capitalize'}}>{line}<select value={budgetDraft[line]} onChange={e=>setBudgetDraft(d=>({...d,[line]:Number(e.target.value)}))}>{Array.from({length:11},(_,n)=><option key={n} value={n} disabled={n > budgetDraft[line] && (budgetDraft.health+budgetDraft.education+budgetDraft.security+budgetDraft.environment+budgetDraft.economy-budgetDraft[line]+n)>10}>{n} coin{n===1?'':'s'}</option>)}</select></label>)}
+    {(['health','education','security','environment','economy'] as const).map(line => <div className="coin-row" key={line}><span>{line}</span><div className="coin-controls"><button type="button" className="coin-button" aria-label={`Remove one ${line} coin`} onClick={()=>setBudgetDraft(d=>({...d,[line]:Math.max(0,d[line]-1)}))} disabled={budgetDraft[line]===0}>−</button><strong aria-live="polite">{budgetDraft[line]}</strong><button type="button" className="coin-button" aria-label={`Add one ${line} coin`} onClick={()=>setBudgetDraft(d=>{const total=d.health+d.education+d.security+d.environment+d.economy;return total>=10?d:{...d,[line]:d[line]+1}})} disabled={budgetDraft.health+budgetDraft.education+budgetDraft.security+budgetDraft.environment+budgetDraft.economy>=10}>+</button></div></div>)}
     <p>Coins allocated: {budgetDraft.health+budgetDraft.education+budgetDraft.security+budgetDraft.environment+budgetDraft.economy} / 10</p>
     <label>Borrowing <select value={budgetDraft.borrowing} onChange={e=>setBudgetDraft(d=>({...d,borrowing:Number(e.target.value) as 0|10|20}))}><option value={0}>0</option><option value={10}>10</option><option value={20}>20</option></select></label>
     <button className="primary-button" onClick={handleSubmitBudget} disabled={privateInfo?.playerId !== gameState.primeMinisterId || budgetDraft.health+budgetDraft.education+budgetDraft.security+budgetDraft.environment+budgetDraft.economy!==10}>Submit budget</button>
   </div>}
   {gameState.phase === 'vote' && <div><h3>Vote on the budget</h3>{gameState.voteChoices?.[privateInfo?.playerId ?? ''] !== undefined ? <p>Your vote is recorded.</p> : <><button className="primary-button" onClick={()=>handleVote(true)}>Approve</button> <button className="secondary-button" onClick={()=>handleVote(false)}>Reject</button></>}<p>Votes cast: {Object.keys(gameState.votes).length}</p></div>}
   <h3>Cabinet seats</h3><ul>{gameState.players.map(p => <li key={p.id}>{p.name}{p.isBot ? ' · AI' : ''} — {p.ministry}</li>)}</ul>
-  <button className="secondary-button" onClick={handleReady}>Ready</button>
+  <button className="secondary-button ready-button" onClick={handleReady}>Ready — move on when everyone is ready</button>
   <h3>Cabinet chat</h3><ul>{gameState.chat.map(m => <li key={m.at + m.playerId}><strong>{m.name}:</strong> {m.text}</li>)}</ul>
   {!['vote','result','finished'].includes(gameState.phase) && <div className="join-row"><input value={chatText} maxLength={140} onChange={e=>setChatText(e.target.value)} placeholder="Message (140 characters max)"/><button className="secondary-button" onClick={handleSendChat} disabled={!chatText.trim()}>Send</button></div>}
 </section>}
+{showRules && <div className="rules-backdrop" role="presentation" onClick={() => setShowRules(false)}><section className="rules-modal" role="dialog" aria-modal="true" aria-labelledby="rules-title" onClick={event => event.stopPropagation()}><button className="rules-close" onClick={() => setShowRules(false)} aria-label="Close rules">×</button><span className="section-kicker">THE RULES OF VELORIA</span><h2 id="rules-title">Three steps to government</h2><ol className="rules-list"><li><strong>Get a secret clue.</strong><p>A crisis hits. Only you know one number, and you can tell the truth or lie.</p></li><li><strong>Argue, then vote.</strong><p>The Prime Minister splits 10 budget coins, and the cabinet votes yes or no.</p></li><li><strong>Survive and unmask.</strong><p>Keep Veloria alive for 3 years, then name the Mole.</p></li></ol><p className="helper-text">Refreshing reconnects you.</p></section></div>}
 <div className="room-players">
   <h3>Players in this room ({players.length})</h3>
   <ul>
