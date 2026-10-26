@@ -1,16 +1,44 @@
-type PublicPlayer = { isMole?: boolean; [key: string]: unknown };
-type PublicGameLike = {
-  privateByPlayer?: unknown;
-  readyByPlayer?: unknown;
-  lastActionAt?: unknown;
-  chat?: unknown;
-  players?: PublicPlayer[];
-  publishedClues?: Array<Record<string, unknown>>;
-  [key: string]: unknown;
+export type GamePlayer = { id: string; name: string; seat: number; isBot: boolean; ministry: string; isMole: boolean; ready: boolean };
+export type PublishedClue = { playerId: string; name: string; ministry: string; value: number; year: number; at: number };
+
+export type PublicGamePlayer = Omit<GamePlayer, 'isMole'>;
+export type PublicPublishedClue = Omit<PublishedClue, 'value'>;
+
+export type PublicGameState = Omit<LiteGameState, 'privateByPlayer' | 'readyByPlayer' | 'lastActionAt' | 'chat' | 'players' | 'publishedClues'> & {
+  players: PublicGamePlayer[];
+  publishedClues: PublicPublishedClue[];
 };
 
-/** Build a browser-safe snapshot. Secrets are never copied into the public projection. */
-export function toPublicGameState<T extends PublicGameLike>(state: T) {
+type LiteGameState = {
+  version: number;
+  status: 'waiting' | 'playing' | 'finished';
+  createdAt: number;
+  phase: string;
+  phaseStartedAt: number;
+  phaseDeadline: number | null;
+  year: number;
+  players: GamePlayer[];
+  privateByPlayer: Record<string, { ministry: string; isMole: boolean; clue: string; trueValue: number }>;
+  publishedClues: PublishedClue[];
+  readyByPlayer: Record<string, boolean>;
+  budgetDraft: Record<string, number> | null;
+  votes: Record<string, boolean>;
+  result: unknown;
+  lastActionAt: Record<string, number>;
+  country: unknown;
+  lastPassedBudget: unknown;
+  failedVotes: 0 | 1;
+  pendingBudget: unknown;
+  voteChoices: Record<string, boolean>;
+  crisisId: string | null;
+  yearResolution: unknown;
+  primeMinisterId: string | null;
+  guesses: Record<string, string>;
+  botPlan: Record<string, unknown>;
+};
+
+/** Build a browser-safe snapshot with an explicit public type. */
+export function toPublicGameState(state: LiteGameState): PublicGameState {
   const {
     privateByPlayer: _private,
     readyByPlayer: _ready,
@@ -20,10 +48,7 @@ export function toPublicGameState<T extends PublicGameLike>(state: T) {
   } = state;
   return {
     ...visible,
-    players: (visible.players ?? []).map(({ isMole: _mole, ...player }) => player),
-    publishedClues: (visible.publishedClues ?? []).map((clue) => {
-      const { trueValue: _trueValue, isMole: _mole, clue: _privateClue, ...publicClue } = clue;
-      return publicClue;
-    }),
+    players: visible.players.map(({ isMole: _mole, ...player }) => player),
+    publishedClues: visible.publishedClues.map(({ value: _trueValue, ...clue }) => clue),
   };
 }
