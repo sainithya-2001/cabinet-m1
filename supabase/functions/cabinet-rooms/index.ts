@@ -30,13 +30,14 @@ type LiteState = {
   botPlan: Record<string, unknown>;
 };
 function jsonResponse(body: Record<string, unknown>, status = 200): Response { return Response.json(body, { status }); }
-type MutationResult = { state: LiteState; status?: string };
-async function mutateGameState(db: Db, roomId: string, apply: (latest: LiteState | null, roomStatus: string) => { state: LiteState; status?: string }): Promise<{ state: LiteState; status: string }> {
+type MutationResult = { state: LiteState; status?: string; changed?: boolean };
+async function mutateGameState(db: Db, roomId: string, apply: (latest: LiteState | null, roomStatus: string) => MutationResult): Promise<{ state: LiteState; status: string }> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const { data: row, error: readError } = await db.from("game_rooms").select("game_state,status").eq("id", roomId).maybeSingle();
     if (readError || !row) throw new Error("Could not reload game state.");
     const latest = row.game_state as LiteState | null;
     const applied = apply(latest, row.status as string);
+    if (applied.changed === false && latest) return { state: latest, status: row.status as string };
     const next = { ...applied.state, version: (latest?.version ?? 0) + 1 };
     let update = db.from("game_rooms").update({ game_state: next, status: applied.status ?? next.status }).eq("id", roomId);
     update = latest ? update.eq("game_state->>version", String(latest.version)) : update.is("game_state", null);
