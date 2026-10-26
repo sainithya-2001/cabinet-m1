@@ -172,7 +172,7 @@ export default {
         const next=initialLiteState((rows??[]) as PlayerRow[]);
         const {error:updateError}=await db.from("game_rooms").update({game_state:next,status:"playing"}).eq("id",room.id).eq("status","waiting");
         if(updateError)return jsonResponse({error:"Could not start game."},500);
-        return jsonResponse({state:publicState(next),private:next.privateByPlayer[player.id]});
+        return jsonResponse({state:publicState(next),private:{...next.privateByPlayer[player.id],playerId:player.id}});
       } catch(e) { return jsonResponse({error:e instanceof Error?e.message:"Could not start game."},400); }
     }
     if(body.action==="state") {
@@ -236,7 +236,7 @@ export default {
     }
     if(body.action==="private") {
       if(!state)return jsonResponse({private:null});
-      return jsonResponse({private:state.privateByPlayer?.[player.id]??null});
+      return jsonResponse({private:state.privateByPlayer?.[player.id]?{...state.privateByPlayer[player.id],playerId:player.id}:null});
     }
     if(body.action==="ready") {
       if(!state||state.status!=="playing")return jsonResponse({error:"The game has not started."},409);
