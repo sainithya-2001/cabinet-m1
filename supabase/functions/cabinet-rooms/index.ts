@@ -263,7 +263,20 @@ export default {
           }
           const now=Date.now();
           let next=state;
-          if (!(state.status==="playing" && state.phaseDeadline!==null && now>=state.phaseDeadline)) return {state,status:roomStatus,changed:false};
+          if (state.status === "playing" && state.phase === "clue") {
+            const dueBots = state.players.filter(p => p.isBot && !state.publishedClues.some(c => c.playerId === p.id && c.year === state.year) && now >= state.phaseStartedAt + 2500 + p.seat * 3500);
+            if (dueBots.length) {
+              const published = [...state.publishedClues];
+              for (const bot of dueBots) {
+                const secret = state.privateByPlayer[bot.id]; if (!secret) continue;
+                const truth = secret.trueValue;
+                const value = secret.isMole ? (bot.ministry === "Finance" ? Math.max(60, Math.min(140, truth + (truth >= 100 ? -18 : 18))) : Math.max(0, Math.min(60, truth + (truth >= 30 ? -8 : 8)))) : truth;
+                published.push({playerId:bot.id,name:bot.name,ministry:secret.ministry,value,trueValue:truth,year:state.year,at:now});
+              }
+              next = {...next,publishedClues:published,version:next.version+1};
+            }
+          }
+          if (!(state.status==="playing" && state.phaseDeadline!==null && now>=state.phaseDeadline)) return {state:next,status:roomStatus,changed:next!==state};
                 if(state.status==="playing" && state.phaseDeadline!==null && now>=state.phaseDeadline) {
                   const phases: Record<string,string> = { headline:"clue", clue:"budget", budget:"vote", vote:"result", result:"headline", guess:"finished" };
                   const phase=phases[state.phase] ?? "headline";
@@ -451,7 +464,7 @@ export default {
       try {
         const saved=await mutateGameState(db,room.id,(latest,roomStatus)=>{
           if(!latest||latest.status!=="playing"||roomStatus!=="playing"||latest.phase!=="guess")throw new Error("Mole guesses are only open at the end of Year 3.");
-          const target=latest.players.find(p=>p.id===payload.playerId&&!p.isBot);if(!target)throw new Error("Choose a human player.");
+          const target=latest.players.find(p=>p.id===payload.playerId);if(!target)throw new Error("Choose a cabinet minister.");
           if(latest.guesses[player.id])throw new Error("You have already guessed.");
           const guesses={...latest.guesses,[player.id]:target.id},humans=latest.players.filter(p=>!p.isBot),allGuessed=humans.every(p=>guesses[p.id]),now=Date.now();
           let next:LiteState={...latest,guesses};

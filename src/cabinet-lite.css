@@ -222,3 +222,23 @@ footer { max-width:1180px; margin:auto; padding:18px 24px; display:flex; justify
  .backbench-avatar { width:60px; height:60px; }
  .backbench-person { flex-basis:80px; }
 }
+
+.veloria-times { max-width:none; width:100%; border:4px double var(--ink); background:#fff8e9; padding:clamp(12px,3vw,30px); }
+.times-masthead { text-align:center; border-bottom:4px double var(--ink); padding-bottom:16px; margin-bottom:20px; }
+.times-masthead>p:first-child { letter-spacing:.16em; font-weight:900; font-size:.72rem; }
+.times-masthead h2 { margin:0; font:900 clamp(2.2rem,7vw,5rem) Georgia,serif; letter-spacing:-.04em; }
+.mole-reveal { display:flex; gap:18px; align-items:center; padding:16px 0; border-bottom:1px solid var(--rule); }
+.times-table-wrap { max-width:100%; overflow-x:auto; }
+.times-table { width:100%; border-collapse:collapse; font-size:.9rem; }
+.times-table th,.times-table td { padding:8px 10px; text-align:left; border-bottom:1px solid #c7b79c; }
+.times-table th { background:#e7dac1; text-transform:uppercase; font-size:.7rem; letter-spacing:.06em; }
+.times-table .clue-lie { background:#f4d7d3; color:#7b1e2b; font-weight:800; }
+.year-summary-list li { padding:8px 0; }
+.phase-action-panel { width:100%; max-width:none; grid-column:1/-1; background:var(--paper); padding:clamp(12px,2vw,24px); border:1px solid var(--rule); box-sizing:border-box; }
+.phase-action-panel .ready-button { position:static; width:100%; margin-top:12px; }
+.classified-dossier .clue-report~p { font-size:.9rem; }
+.classified-dossier .clue-report~p strong { font-size:1em; }
+.indicator-breakdown { display:grid; grid-template-columns:minmax(190px,.7fr) minmax(0,1.3fr); gap:8px 18px; align-items:baseline; }
+.indicator-breakdown h4,.indicator-breakdown p { margin:4px 0; }
+@media(max-width:999px) { .indicator-breakdown { grid-template-columns:1fr; gap:2px; } }
+@media(max-width:600px) { .app-shell.in-game { padding-left:8px; padding-right:8px; } .live-game { display:flex; flex-direction:column; width:100%; min-width:0; } .phase-action-panel { width:100%; min-width:0; } .times-table { min-width:600px; } }
