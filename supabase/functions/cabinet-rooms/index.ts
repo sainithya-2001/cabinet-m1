@@ -195,7 +195,11 @@ export default {
           }
         } else if(state.phase==="guess") {
           status="finished";
-          next={...state,status,phase:"finished",phaseStartedAt:now,phaseDeadline:null,version:state.version+1};
+          const humans=state.players.filter(p=>!p.isBot);
+          const mole=state.players.find(p=>p.isMole);
+          const correct=humans.filter(p=>state.guesses[p.id]===mole?.id).length;
+          const incorrect=humans.length-correct;
+          next={...state,status,phase:"finished",phaseStartedAt:now,phaseDeadline:null,result:{outcome:incorrect>correct?"Mole wins":"Cabinet wins",moleName:mole?.name,correctGuesses:correct,incorrectGuesses:incorrect,guesses:state.guesses},version:state.version+1};
         } else {
           const duration=phase==="clue"?(year===1?60000:30000):phase==="budget"?(year===1?40000:30000):phase==="vote"?(year===1?15000:10000):phase==="result"?(year===1?15000:10000):30000;
           next={...state,phase,phaseStartedAt:now,phaseDeadline:now+duration,readyByPlayer:{},version:state.version+1};
