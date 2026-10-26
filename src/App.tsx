@@ -5,7 +5,7 @@ import {
   joinRoom,
   getRoomPlayers,
   type RoomPlayer,
-  startGame, getGameState, getPrivateGameInfo, markReady, sendRoomChat, submitLiteBudget, castBudgetVote,
+  startGame, getGameState, getPrivateGameInfo, markReady, sendRoomChat, submitLiteBudget, castBudgetVote, submitMoleGuess,
   type PublicGameState, type PrivateGameInfo,
 } from './room-service.js';
 type RoomInfo = {
@@ -82,6 +82,12 @@ const [budgetDraft, setBudgetDraft] = useState({health:2,education:2,security:2,
     const id = window.setInterval(() => { void refreshGame(); }, 2000);
     return () => { active = false; window.clearInterval(id); };
   }, [room]);
+
+  async function handleGuess(playerId: string) {
+    if (!room) return;
+    try { const r = await submitMoleGuess(room.roomId, room.playerToken, playerId); setGameState(r.state); }
+    catch (e) { setMessage(e instanceof Error ? e.message : 'Could not submit guess.'); }
+  }
 
   async function handleSubmitBudget() {
     if (!room) return;
@@ -255,6 +261,8 @@ const [budgetDraft, setBudgetDraft] = useState({health:2,education:2,security:2,
   <span className="section-kicker">YEAR {gameState.year} OF 3</span><h2>{gameState.phase.toUpperCase()}</h2>
   <p>Game status: {gameState.status}</p>
   {privateInfo && <div className="private-role"><h3>Your private role</h3><p>Ministry: <strong>{privateInfo.ministry}</strong></p><p>Secret: <strong>{privateInfo.isMole ? 'Mole' : 'Cabinet member'}</strong></p><p>{privateInfo.clue}</p></div>}
+  {gameState.phase === 'guess' && <div className="mole-guess"><h3>Who is the Mole?</h3><p>Choose the player you suspect. Your guess is final.</p>{gameState.players.filter(p=>!p.isBot).map(p=><button key={p.id} className="secondary-button" onClick={()=>handleGuess(p.id)}>{p.name}</button>)}</div>}
+  {gameState.phase === 'finished' && <div className="game-result"><h3>Game over</h3><pre>{JSON.stringify(gameState.result,null,2)}</pre></div>}
   {gameState.phase === 'budget' && <div className="lite-budget">
     <h3>Draft the ten-coin budget</h3>
     {(['health','education','security','environment','economy'] as const).map(line => <label key={line} style={{display:'flex',justifyContent:'space-between',gap:12,margin:'8px 0',textTransform:'capitalize'}}>{line}<select value={budgetDraft[line]} onChange={e=>setBudgetDraft(d=>({...d,[line]:Number(e.target.value)}))}>{Array.from({length:11},(_,n)=><option key={n} value={n}>{n} coin{n===1?'':'s'}</option>)}</select></label>)}
