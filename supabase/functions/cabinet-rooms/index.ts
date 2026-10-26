@@ -1,3 +1,4 @@
+import { liteCollapseVerdict } from "../../../src/engine/lite-collapse.ts";
 import { calculateYearFinances, createInitialState, defaultBudget, resolveYear, sectorNeeds } from "../../../src/engine/economy.ts";
 import { makeCrisis, CRISIS_TEMPLATES } from "../../../src/engine/crises.ts";
 import type { Budget, CountryState, YearInputs } from "../../../src/engine/types.ts";

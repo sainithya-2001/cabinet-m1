@@ -47,9 +47,9 @@ export function toEngineBudget(draft: LiteBudgetDraft): Budget {
     health: draft.health * 10,
     education: draft.education * 10,
     security: draft.security * 10,
-    infrastructure: draft.economy * 5,
+    infrastructure: draft.economy * 3,
     environment: draft.environment * 10,
-    industry: draft.economy * 5,
+    industry: draft.economy * 7,
     debtRepayment: 0,
   };
 
@@ -63,7 +63,7 @@ export function fromEngineBudget(budget: Budget): LiteBudgetDraft {
     ['education', budget.shares.education / 10],
     ['security', budget.shares.security / 10],
     ['environment', budget.shares.environment / 10],
-    ['economy', (budget.shares.infrastructure + budget.shares.industry) / 10],
+    ['economy', (budget.shares.infrastructure / 3 + budget.shares.industry / 7) / 2],
   ];
 
   const valuesByLine = Object.fromEntries(pairs) as Record<LiteBudgetLine, number>;
