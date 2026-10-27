@@ -35,8 +35,8 @@ type LiteState = {
   guesses: Record<string, string>;
   botPlan: Record<string, unknown>;
 };
-async function broadcastBotMoment(db: any, roomId: string, state: LiteState, moment: "clue" | "budget" | "vote") {
-  const voices: Record<string, Record<typeof moment, string[]>> = {
+async function broadcastBotMoment(db: any, roomId: string, state: LiteState, moment: "clue" | "budget" | "vote" | "result") {
+  const voices: Record<string, Partial<Record<typeof moment, string[]>>> = {
     "Sir Nodsalot": { clue: ["Zzz… a number. Wake me when it becomes policy.", "I heard a figure. I voted in my sleep once."], budget: ["Zzz… those coins look adequately round.", "I support whichever budget lets me nap."], vote: ["Was that a yes? I shall nod appropriately.", "The result is in. Excellent. Back to sleep."] },
     "Baroness Slowclap": { clue: ["👏 A 👏 figure 👏 of 👏 breathtaking 👏 ambition.", "How brave. A number without a shred of modesty."], budget: ["A budget. I shall applaud the arithmetic.", "At last, a chance to fund something with a proper entrance."], vote: ["A decision! Let us applaud the consequences.", "How decisive. Three very slow claps."] },
     "Sir Reginald Filibuster": { clue: ["That figure requires, at minimum, a subcommittee.", "I reserve judgement until I have spoken for forty minutes."], budget: ["I move that we debate every coin individually.", "This budget is missing an appendix and a lengthy preface."], vote: ["The House has decided, though I have not finished speaking.", "I request a recount of the arguments, not the votes."] },
@@ -48,12 +48,20 @@ async function broadcastBotMoment(db: any, roomId: string, state: LiteState, mom
   };
   const available = [...(state.backbenchers ?? [])];
   if (!available.length) return;
-  const count = Math.min(2, available.length, 1 + crypto.getRandomValues(new Uint32Array(1))[0] % 2);
+  const count = Math.min(4, available.length, 2 + crypto.getRandomValues(new Uint32Array(1))[0] % 3);
   const channel = db.channel("cabinet-chat:" + roomId);
   for (let i = 0; i < count; i++) {
     const bot = available.splice(crypto.getRandomValues(new Uint32Array(1))[0] % available.length, 1)[0];
-    const options = voices[bot.name]?.[moment] ?? ["The House has given me much to think about. I shall think theatrically."];
-    const message = { id: crypto.randomUUID(), playerId: bot.id, name: bot.name, text: options[crypto.getRandomValues(new Uint32Array(1))[0] % options.length], at: Date.now() + i };
+    const clue = (state.publishedClues ?? []).filter(c => c.year === state.year).slice(-1)[0];
+    const sector = ["health","education","security","environment","economy"][i % 5];
+    const amount = state.pendingBudget?.[sector] ?? state.budgetDraft?.[sector] ?? 0;
+    const voteNames = state.players.filter(p => state.voteChoices?.[p.id] !== undefined).map(p => p.name + " voted " + (state.voteChoices[p.id] ? "aye" : "no"));
+    const result = state.result as {resolution?:{changes?:Record<string,{before:number;after:number}>}} | null;
+    const stability = result?.resolution?.changes?.stability;
+    const dynamicLines = moment === "clue" && clue ? [clue.ministry === "Finance" ? "Revenue is " + clue.value + "? The Treasury has never been that cheerful." : clue.ministry + " at " + clue.value + "? That figure smells of committee.", "I have questions about " + clue.name + "'s suspiciously confident number."] : moment === "budget" ? ["Only " + amount + " coins for " + sector + "?", "My sector has submitted a formal complaint about this allocation."] : moment === "vote" ? [(voteNames.slice(-2).join("; ") || "The House") + ". I shall remember these votes.", "I heard those votes and reserve the right to be theatrically disappointed."] : ["Stability " + (stability ? (stability.after < stability.before ? "down " : "up ") + Math.abs(stability.after-stability.before) : "has changed") + "! Who could have predicted this? Me. I predicted this.", "The result is in. I shall pretend I expected it."];
+    const options = [...(voices[bot.name]?.[moment] ?? []), ...dynamicLines];
+    const message = { id: crypto.randomUUID(), playerId: bot.id, name: bot.name, text: options[crypto.getRandomValues(new Uint32Array(1))[0] % options.length], at: Date.now() + i * 1800 };
+    if (i) await new Promise(resolve => setTimeout(resolve, 1800));
     try { await channel.send({ type: "broadcast", event: "chat-message", payload: message }); } catch (error) { console.error("Bot moment broadcast failed:", error); }
   }
 }
@@ -516,7 +524,7 @@ export default {
           }
           return {state:next,status:next.status};
         });
-        if (saved.state.phase !== "vote" || saved.state.result) await broadcastBotMoment(db, room.id, saved.state, "vote");
+        if (saved.state.phase !== "vote" || saved.state.result) await broadcastBotMoment(db, room.id, saved.state, saved.state.phase === "result" ? "result" : "vote");
         return jsonResponse({state:publicState(saved.state)});
       } catch(e) { return jsonResponse({error:e instanceof Error?e.message:"Could not save vote."},409); }
     }
@@ -547,7 +555,13 @@ export default {
         const channel=db.channel("cabinet-chat:"+room.id);
         const sent=await channel.send({type:"broadcast",event:"chat-message",payload:message});
         if(sent==="error")throw new Error("Could not broadcast chat message.");
-        const lower=text.toLowerCase(), reacts=/\b(lie|liar|trust)\b/.test(lower)||/\b(8[0-9]|9[0-9]|1[0-4][0-9])\b/.test(text), busy=lower.includes("!")||lower.includes("order")||text.length>110;
+        const lower=text.toLowerCase();
+        const accusedMole = state.players.find(p => p.isBot && state.privateByPlayer[p.id]?.isMole && lower.includes(p.name.toLowerCase()) && /\\b(liar|mole)\\b/.test(lower));
+        if (accusedMole) {
+          const defences = ["I am absolutely, categorically, spectacularly not the Mole. Why would you even ask?", "The Mole? Me? This accusation is so outrageous I shall deny it twice.", "I demand an apology, a retraction, and a committee to investigate whoever said Mole.", "I am innocent. Suspiciously innocent? That is an insulting distinction."];
+          await db.channel("cabinet-chat:"+room.id).send({type:"broadcast",event:"chat-message",payload:{id:crypto.randomUUID(),playerId:accusedMole.id,name:accusedMole.name,text:defences[crypto.getRandomValues(new Uint32Array(1))[0]%defences.length],at:Date.now()+700}});
+        }
+        const reacts=/\b(lie|liar|trust)\b/.test(lower)||/\b(8[0-9]|9[0-9]|1[0-4][0-9])\b/.test(text), busy=lower.includes("!")||lower.includes("order")||text.length>110;
         if(reacts&&state.backbenchers?.length){
           const pick=state.backbenchers[crypto.getRandomValues(new Uint32Array(1))[0]%state.backbenchers.length];
           const lines:Record<string,string[]>={"Sir Nodsalot":["Zzz… wait, someone said liar? Aye. Probably.","I was asleep for that number. It sounded suspicious."],"Baroness Slowclap":["👏 A 👏 deeply 👏 convincing 👏 claim.","How brave. A number with absolutely no supporting evidence."],"Sir Reginald Filibuster":["Before we call anyone a liar, a brief history of inaccurate figures…","I shall respond in three volumes. This is volume one."],"The Hon. Member for Shouting":["OUTRAGEOUS! THAT NUMBER IS LOUDLY WRONG!","LIAR? I DEMAND A LOUDER LIAR!"],"Minister Low-Battery":["sorry was that a lie or a group chat","one sec… checking if trust is on this app"],"The Paper-Tearer":["*tears up the claim*","This claim has been rejected by the paper shredder."],"Sir Point-of-Order":["POINT OF ORDER: define “trust” before proceeding.","Your accusation lacks a properly numbered appendix."],"Lord Ribbon-Cutter":["I propose a ribbon-cutting ceremony for this enormous number.","Imagine the headline. Imagine the scissors."]};
