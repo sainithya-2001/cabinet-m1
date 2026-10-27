@@ -34,35 +34,97 @@ type LiteState = {
   primeMinisterId: string | null;
   guesses: Record<string, string>;
   botPlan: Record<string, unknown>;
+  usedBotBanterLines?: string[];
 };
 async function broadcastBotMoment(db: any, roomId: string, state: LiteState, moment: "clue" | "budget" | "vote" | "result") {
   const voices: Record<string, Partial<Record<typeof moment, string[]>>> = {
-    "Sir Nodsalot": { clue: ["Zzz… a number. Wake me when it becomes policy.", "I heard a figure. I voted in my sleep once."], budget: ["Zzz… those coins look adequately round.", "I support whichever budget lets me nap."], vote: ["Was that a yes? I shall nod appropriately.", "The result is in. Excellent. Back to sleep."] },
-    "Baroness Slowclap": { clue: ["👏 A 👏 figure 👏 of 👏 breathtaking 👏 ambition.", "How brave. A number without a shred of modesty."], budget: ["A budget. I shall applaud the arithmetic.", "At last, a chance to fund something with a proper entrance."], vote: ["A decision! Let us applaud the consequences.", "How decisive. Three very slow claps."] },
-    "Sir Reginald Filibuster": { clue: ["That figure requires, at minimum, a subcommittee.", "I reserve judgement until I have spoken for forty minutes."], budget: ["I move that we debate every coin individually.", "This budget is missing an appendix and a lengthy preface."], vote: ["The House has decided, though I have not finished speaking.", "I request a recount of the arguments, not the votes."] },
-    "The Hon. Member for Shouting": { clue: ["THAT NUMBER IS EITHER BRILLIANT OR A NATIONAL DISGRACE!", "I DEMAND THIS FIGURE BE READ ALOUD, LOUDER!"], budget: ["FUND SOMETHING! CUT SOMETHING! I FORGOT WHICH!", "THIS BUDGET HAS TOO MANY COINS AND NOT ENOUGH OUTRAGE!"], vote: ["THE HOUSE HAS SPOKEN! I SHALL SHOUT IT AGAIN!", "I ACCEPT THIS OUTCOME UNDER EXTREMELY LOUD PROTEST!"] },
-    "Minister Low-Battery": { clue: ["number received. processing… maybe.", "that figure has low confidence and 2% battery."], budget: ["budget uploaded. have we tried turning the economy off and on?", "coins allocated. enthusiasm not found."], vote: ["result received. reaction loading…", "my civic battery is at 1%." ] },
-    "The Paper-Tearer": { clue: ["*holds the figure up to the light, then tears it in half*", "This number has failed its paper inspection."], budget: ["*shuffles the budget papers ominously*", "Filed under ‘suspicious stationery’."], vote: ["*tears up one copy of the result, keeps another*", "The paperwork remains emotionally unofficial."] },
-    "Sir Point-of-Order": { clue: ["POINT OF ORDER: what is the evidence for that figure?", "I request a footnote for this suspiciously round number."], budget: ["POINT OF ORDER: who authorised these coins to be adjacent?", "Procedurally interesting and morally confusing."], vote: ["POINT OF ORDER: I challenge the order of this result.", "The vote is concluded; my objections are just starting."] },
-    "Lord Ribbon-Cutter": { clue: ["A splendid number. I can picture the unveiling ceremony.", "Imagine the headline. Imagine the ribbon."], budget: ["Can we unveil the health allocation with a ribbon?", "I propose a photo opportunity for each department."], vote: ["Whatever the result, I brought ceremonial scissors.", "A historic decision. Fetch the ribbon and photographer."] }
+    "Sir Nodsalot": {
+      clue: ["Zzz… I dreamt the Treasury was cheerful. It wasn't.", "That figure has the comforting shape of a pillow.", "I shall sleep on this number before forming an opinion."],
+      budget: ["Only {n} coins for {sector}? I shall file a complaint after my nap.", "My budget recommendation is: more pillows, fewer meetings.", "I support this allocation in principle, provided I can snooze through it."],
+      vote: ["I nodded during the vote. I hope that counted as civic engagement.", "I heard {votes} through a very restful haze.", "The ayes have it? Or was that my alarm?"],
+      result: ["Stability {change}! I predicted it in a dream I can no longer recall.", "The figures have changed. Wake me if they change back.", "I shall take this result lying down, as is tradition."]
+    },
+    "Baroness Slowclap": {
+      clue: ["A figure like {clue} deserves a velvet curtain and three slow claps.", "I applaud the confidence behind {clue}; the evidence can arrive later.", "What a dramatic entrance for {clue}. The orchestra is underfunded."],
+      budget: ["Only {n} coins for {sector}? I shall withhold my slow clap.", "The {sector} allocation needs a grand entrance and a larger budget.", "I propose an applause ceremony for every coin sent to {sector}."],
+      vote: ["I heard {votes}; the applause will be carefully rationed.", "A vote without a standing ovation is merely paperwork.", "I shall clap once for the ayes and twice for my own restraint."],
+      result: ["Stability {change}! Please hold your applause until I have finished predicting it.", "The outcome is dramatic enough for a curtain call.", "I knew the finale needed more applause and slightly fewer surprises."]
+    },
+    "Sir Reginald Filibuster": {
+      clue: ["I require a subcommittee to examine {clue}, followed by a committee to examine the subcommittee.", "The figure {clue} is missing at least four appendices.", "I shall speak for forty minutes about why {clue} requires context."],
+      budget: ["Only {n} coins for {sector}? I move that we debate each coin individually.", "The {sector} allocation lacks a preface, an appendix, and a lengthy conclusion.", "I request an adjournment until the {sector} figures have been read aloud twice."],
+      vote: ["I heard {votes}; I object to the order in which those arguments were counted.", "The House has voted, but my speech has only reached its introduction.", "I request a recount of the debate, with footnotes."],
+      result: ["Stability {change}! I predicted this in appendix C, which I have not yet read aloud.", "I move that we establish a commission to examine this outcome.", "The result confirms my position, which I shall now explain at length."]
+    },
+    "The Hon. Member for Shouting": {
+      clue: ["{clue}?! EITHER A MASTERSTROKE OR A NATIONAL DISGRACE!", "I DEMAND THAT {clue} BE READ ALOUD, LOUDER!", "SUSPICIOUS FIGURES! I SHALL OUTSHOUT {clue} UNTIL IT CONFESSES!"],
+      budget: ["ONLY {n} COINS FOR {sector}?! SOUND THE ALARM!", "THE {sector} ALLOCATION IS TOO QUIET! ADD COINS AND VOLUME!", "I DEMAND A LOUDER BUDGET FOR {sector}!"],
+      vote: ["{votes}?! I SHALL SHOUT THE RECORD BACK TO THE HOUSE!", "I ACCEPT THIS VOTE UNDER EXTREMELY LOUD PROTEST!", "ORDER! I CANNOT HEAR MY OWN OBJECTION!"],
+      result: ["STABILITY {change}?! I PREDICTED THIS AT MAXIMUM VOLUME!", "THE RESULT IS IN! I DEMAND A LOUDER RESULT!", "I AM OUTRAGED BY THE POSSIBILITY OF BEING RIGHT!"]
+    },
+    "Minister Low-Battery": {
+      clue: ["{clue} received. processing… battery at 2%.", "my suspicion module flagged {clue}. update postponed.", "{clue} looks like a number. confidence loading…"],
+      budget: ["only {n} coins for {sector}? my budget app has stopped responding.", "the {sector} allocation is underfunded. have you tried restarting parliament?", "coins requested for {sector}. enthusiasm not found."],
+      vote: ["{votes} received. reaction loading…", "my civic battery is at 1%; please save the vote log.", "the vote completed but the notification did not."],
+      result: ["stability {change}. prediction module unavailable.", "result received. celebration app crashed.", "the outcome is stored locally. my reaction is still syncing."]
+    },
+    "The Paper-Tearer": {
+      clue: ["*inspects {clue}, then tears up the supporting paperwork*", "{clue} has failed my stationery inspection.", "I demand {clue} be resubmitted on sturdier paper."],
+      budget: ["Only {n} coins for {sector}? *tears up the allocation form*", "The {sector} budget has been filed under ‘suspicious stationery’.", "*shuffles three forms and rejects the {sector} request*"],
+      vote: ["I have filed {votes} in a very loud folder.", "*tears up one copy of the vote and keeps another*", "The vote is official. My paperwork remains emotionally unconvinced."],
+      result: ["Stability {change}! *tears up the prediction form*", "*files the outcome under ‘unexpected paperwork’*", "The result is official; the stationery has lodged an appeal."]
+    },
+    "Sir Point-of-Order": {
+      clue: ["POINT OF ORDER: what is the evidence supporting {clue}?", "I request a numbered footnote for {clue}.", "The record must show my procedural concern about {clue}."],
+      budget: ["POINT OF ORDER: only {n} coins for {sector}?", "Who authorised the {sector} allocation without a properly numbered appendix?", "I challenge the procedure by which the {sector} request was considered."],
+      vote: ["POINT OF ORDER: the record shows {votes}. I object to the formatting.", "The vote has concluded; my objections are just getting started.", "I challenge the procedure by which procedure was followed."],
+      result: ["POINT OF ORDER: stability {change}! I requested a forecast in triplicate.", "I predicted this in a properly numbered appendix.", "The outcome is valid. My objection is also valid."]
+    },
+    "Lord Ribbon-Cutter": {
+      clue: ["{clue} deserves an unveiling ceremony, a ribbon, and a photographer.", "Imagine the headline announcing {clue}. Imagine the scissors.", "I propose a ceremonial plaque commemorating {clue}."],
+      budget: ["Only {n} coins for {sector}? Can we unveil the allocation with a ribbon?", "The {sector} department deserves a ribbon-cutting and a bigger cheque.", "I have ordered ceremonial scissors for the {sector} budget."],
+      vote: ["I heard {votes}; whatever the outcome, I brought ceremonial scissors.", "A vote this historic needs a photographer and a velvet rope.", "I propose a ribbon-cutting ceremony for the tally."],
+      result: ["Stability {change}! I predicted it beside a very photogenic ribbon.", "A historic result. Fetch the photographer and ceremonial scissors.", "I shall unveil the outcome after the refreshments."]
+    }
   };
-  const available = [...(state.backbenchers ?? [])];
+  const initialClue = (state.publishedClues ?? []).filter(c => c.year === state.year).slice(-1)[0];
+  const sectorNames: Record<string,string> = {health:"Health",education:"Education",security:"Security",environment:"Environment",economy:"Economy"};
+  const result = state.result as {resolution?:{changes?:Record<string,{before:number;after:number}>}} | null;
+  const stability = result?.resolution?.changes?.stability;
+  const change = stability ? (stability.after < stability.before ? "down " : "up ") + Math.abs(stability.after-stability.before) : "changed";
+  const voteNames = state.players.filter(p => state.voteChoices?.[p.id] !== undefined).map(p => p.name + " voted " + (state.voteChoices[p.id] ? "aye" : "no"));
+  const available = [...(state.backbenchers ?? []), ...(state.players ?? []).filter(p => p.isBot).map(p => ({id:p.id,name:p.name,portrait:p.avatar ?? ""}))];
   if (!available.length) return;
+  const used = new Set(state.usedBotBanterLines ?? []);
   const count = Math.min(4, available.length, 2 + crypto.getRandomValues(new Uint32Array(1))[0] % 3);
   const channel = db.channel("cabinet-chat:" + roomId);
+  let previousBot = "";
   for (let i = 0; i < count; i++) {
-    const bot = available.splice(crypto.getRandomValues(new Uint32Array(1))[0] % available.length, 1)[0];
-    const clue = (state.publishedClues ?? []).filter(c => c.year === state.year).slice(-1)[0];
-    const sector = ["health","education","security","environment","economy"][i % 5];
-    const amount = state.pendingBudget?.[sector] ?? state.budgetDraft?.[sector] ?? 0;
-    const voteNames = state.players.filter(p => state.voteChoices?.[p.id] !== undefined).map(p => p.name + " voted " + (state.voteChoices[p.id] ? "aye" : "no"));
-    const result = state.result as {resolution?:{changes?:Record<string,{before:number;after:number}>}} | null;
-    const stability = result?.resolution?.changes?.stability;
-    const dynamicLines = moment === "clue" && clue ? [clue.ministry === "Finance" ? "Revenue is " + clue.value + "? The Treasury has never been that cheerful." : clue.ministry + " at " + clue.value + "? That figure smells of committee.", "I have questions about " + clue.name + "'s suspiciously confident number."] : moment === "budget" ? ["Only " + amount + " coins for " + sector + "?", "My sector has submitted a formal complaint about this allocation."] : moment === "vote" ? [(voteNames.slice(-2).join("; ") || "The House") + ". I shall remember these votes.", "I heard those votes and reserve the right to be theatrically disappointed."] : ["Stability " + (stability ? (stability.after < stability.before ? "down " : "up ") + Math.abs(stability.after-stability.before) : "has changed") + "! Who could have predicted this? Me. I predicted this.", "The result is in. I shall pretend I expected it."];
-    const options = [...(voices[bot.name]?.[moment] ?? []), ...dynamicLines];
-    const message = { id: crypto.randomUUID(), playerId: bot.id, name: bot.name, text: options[crypto.getRandomValues(new Uint32Array(1))[0] % options.length], at: Date.now() + i * 1800 };
-    if (i) await new Promise(resolve => setTimeout(resolve, 1800));
-    try { await channel.send({ type: "broadcast", event: "chat-message", payload: message }); } catch (error) { console.error("Bot moment broadcast failed:", error); }
+    const choices = available.filter(bot => bot.name !== previousBot);
+    if (!choices.length) break;
+    const bot = choices[crypto.getRandomValues(new Uint32Array(1))[0] % choices.length];
+    const sector = sectorNames[["health","education","security","environment","economy"][i % 5]];
+    const amount = state.pendingBudget?.[sector.toLowerCase()] ?? state.budgetDraft?.[sector.toLowerCase()] ?? 0;
+    const clue = initialClue ? initialClue.name + " says " + (initialClue.ministry === "Finance" ? "revenue is " : initialClue.ministry + " need is ") + initialClue.value : "the published figures";
+    const context = {n:String(amount),sector,clue,votes:voteNames.slice(-2).join("; ") || "no recorded votes",change};
+    const templates = voices[bot.name]?.[moment] ?? [];
+    const candidates = templates.map(line => line.replace(/\{(n|sector|clue|votes|change)\}/g, (_, key) => context[key as keyof typeof context]));
+    const line = candidates.find(candidate => !used.has(candidate));
+    if (!line) { available.splice(available.findIndex(b => b.id === bot.id), 1); i--; continue; }
+    const saved = await mutateGameState(db, roomId, (latest, roomStatus) => {
+      if (!latest) throw new Error("Game state missing while reserving bot line.");
+      const latestUsed = latest.usedBotBanterLines ?? [];
+      if (latestUsed.includes(line)) return {state:latest,changed:false};
+      return {state:{...latest,usedBotBanterLines:[...latestUsed,line],version:latest.version+1},status:roomStatus};
+    });
+    if ((saved.state.usedBotBanterLines ?? []).filter(value => value === line).length !== 1) continue;
+    used.add(line);
+    available.splice(available.findIndex(b => b.id === bot.id), 1);
+    previousBot = bot.name;
+    const message = {id:crypto.randomUUID(),playerId:bot.id,name:bot.name,text:line,at:Date.now()+i*1800};
+    if (i) await new Promise(resolve => setTimeout(resolve,1800));
+    try { await channel.send({type:"broadcast",event:"chat-message",payload:message}); }
+    catch(error) { console.error("Bot moment broadcast failed:",error); }
   }
 }
 function jsonResponse(body: Record<string, unknown>, status = 200): Response { return Response.json(body, { status }); }
