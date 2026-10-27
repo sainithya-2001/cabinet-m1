@@ -593,6 +593,6 @@ footer { max-width:1180px; margin:auto; padding:18px 24px; display:flex; justify
 .quick-chat-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.quick-chat-button{min-height:44px;margin:0!important}@media(max-width:700px){.quick-chat-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.quick-chat-button{padding:8px 6px;font-size:.72rem}}
 
 /* Year-one onboarding cue */
-.your-move-hint{margin:0 0 12px;padding:9px 12px;border-left:5px solid var(--burgundy);background:#f7eadb;color:var(--ink);font-size:.9rem;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.your-move-hint{margin:0 0 12px;padding:9px 12px;border-left:5px solid var(--burgundy);background:#f7eadb;color:var(--ink);font-size:.9rem;line-height:1.25;white-space:normal;overflow:visible;text-overflow:clip}
 .your-move-hint strong{font-weight:900;color:var(--burgundy)}
 @media(max-width:600px){.your-move-hint{font-size:.76rem;padding:8px 9px}}
