@@ -18,9 +18,17 @@ If Veloria survives, everyone who names the Mole wins. If the country collapses 
 
 **Trying it alone?** Open the link in a normal window and a private window. Create a room in one, join with the code in the other.
 
-| Lobby | Voting in the chamber | The finale |
-|---|---|---|
-| ![Lobby](docs/screenshots/lobby.jpg) | ![Vote](docs/screenshots/vote.jpg) | ![Who lied?](docs/screenshots/finale-who-lied.jpg) |
+   ### The lobby
+   ![Lobby](docs/screenshots/lobby.jpg)
+
+   ### Voting in the chamber
+   ![Voting in the chamber](docs/screenshots/vote.jpg)
+
+   ### The finale: The Veloria Times
+   ![Who lied?](docs/screenshots/finale-who-lied.jpg)
+
+   ### On a phone
+   <img src="docs/screenshots/phone-clue.jpg" alt="Clue phase on a phone" width="320">
 
 ---
 
