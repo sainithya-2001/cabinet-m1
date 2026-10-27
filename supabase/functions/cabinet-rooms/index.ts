@@ -516,7 +516,7 @@ export default {
         });
         const published=saved.state.publishedClues.find(c=>c.playerId===player.id&&c.year===saved.state.year);
         if(!published) throw new Error("Published clue was not saved.");
-        const coinNote=published.ministry==="Finance"?"":" (≈ "+Math.max(0,Math.round(published.value/10))+" coins)";
+        const coinNote=published.ministry==="Finance"?"":" (≈ "+Math.max(0,Math.round(published.value/10))+(Math.max(0,Math.round(published.value/10))===1?" coin)":" coins)");
         const message={id:player.id+":"+published.year+":"+published.at,playerId:player.id,name:player.player_name,text:published.ministry+": "+(published.ministry==="Finance"?"revenue is":"need is")+" "+published.value+coinNote,at:published.at,kind:"clue"};
         try { const sent=await db.channel("cabinet-chat:"+room.id).send({type:"broadcast",event:"chat-message",payload:message}); if(sent==="error") throw new Error("Could not broadcast clue."); }
         catch(e) { console.error("Clue chat broadcast failed:",e); }
