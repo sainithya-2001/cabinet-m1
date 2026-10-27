@@ -283,3 +283,26 @@ footer { max-width:1180px; margin:auto; padding:18px 24px; display:flex; justify
   .speaker-phase-row,.phase-status,.speaker-banner,.phase-tracker,.chamber-scene,.chamber-chat { min-width:0; max-width:100%; }
   .speaker-order-bubble { min-width:0; overflow-wrap:anywhere; }
 }
+
+
+/* Final 390px viewport guardrails: let every game column shrink to the viewport. */
+@media(max-width:600px) {
+  html, body, #root { width:100%; max-width:100%; min-width:0; overflow-x:clip; }
+  .app-shell.in-game, .in-game .hero, .in-game .game-panel, .in-game .room-details,
+  .in-game .live-game, .phase-action-panel, .game-result, .veloria-times,
+  .times-masthead, .mole-reveal, .year-summary-list, .year-summary-list li {
+    box-sizing:border-box; width:100%; max-width:100%; min-width:0;
+  }
+  .in-game .hero, .in-game .game-panel, .in-game .room-details, .live-game,
+  .phase-action-panel, .veloria-times { overflow-x:clip; }
+  .indicator-gauges { grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px 5px; }
+  .indicator-gauge, .indicator-gauge>span, .indicator-gauge>span>span { min-width:0; }
+  .indicator-gauge>span { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; }
+  .indicator-gauge .indicator-label-short { display:block; max-width:100%; white-space:normal; text-align:center; }
+  .indicator-gauge>span b { width:auto; }
+  .times-table-wrap { width:100%; min-width:0; }
+  .times-table tbody, .times-table tr { width:100%; }
+  .times-table tr { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  .mole-reveal-portrait { width:min(160px,100%); max-width:160px; max-height:160px; }
+  .times-masthead h2 { font-size:clamp(1.7rem,8vw,2.4rem); }
+}
