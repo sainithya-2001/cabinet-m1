@@ -1,12 +1,12 @@
 
 import { describe, expect, it } from 'vitest';
-import { createGameSetup } from '../src/engine/game.js';
+import { createGameSetup } from '../src/engine/game.ts';
 import {
   advancePhase,
   createGameFlow,
   finishGameOnCollapse,
   getCurrentPrimeMinister,
-} from '../src/engine/game-flow.js';
+} from '../src/engine/game-flow.ts';
 
 function makeFlow() {
   const setup = createGameSetup(

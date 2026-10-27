@@ -1,19 +1,19 @@
 
-import { applyEconomicPower } from './engine/power-effects.js';
+import { applyEconomicPower } from './engine/power-effects.ts';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 
-import { createGameSetup } from './engine/game.js';
-import { createGameFlow, advancePhase, getCurrentPrimeMinister } from './engine/game-flow.js';
+import { createGameSetup } from './engine/game.ts';
+import { createGameFlow, advancePhase, getCurrentPrimeMinister } from './engine/game-flow.ts';
 import {
   createInitialState,
   defaultBudget,
   makeCrisis,
   resolveYear,
   mulberry32,
-} from './engine/index.js';
-import type { InterestRate, TradeModifier, Budget, YearInputs } from './engine/types.js';
-import { createConditions } from './simulator/simulation.js';
+} from './engine/index.ts';
+import type { InterestRate, TradeModifier, Budget, YearInputs } from './engine/types.ts';
+import { createConditions } from './simulator/simulation.ts';
 
 const terminal = createInterface({ input: stdin, output: stdout });
 
@@ -371,7 +371,7 @@ let yearDelayedTradeEffects: {
       console.log(`\n${pm.name} is drafting the budget.`);
       let budget = await draftBudget(lastPassedBudget);
 
-      const errors = (await import('./engine/economy.js')).validateBudget(budget);
+      const errors = (await import('./engine/economy.ts')).validateBudget(budget);
       if (errors.length) {
         console.log(`Budget invalid: ${errors.join(' ')}`);
         budget = defaultBudget();

@@ -7,8 +7,8 @@ import {
   validateBudget,
   projectYear,
   mulberry32,
-} from '../src/engine/index.js';
-import type { YearInputs } from '../src/engine/index.js';
+} from '../src/engine/index.ts';
+import type { YearInputs } from '../src/engine/index.ts';
 
 const baseInputs: YearInputs = {
   revenueTradeModifier: 0,

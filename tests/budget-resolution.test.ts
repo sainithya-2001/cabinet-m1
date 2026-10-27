@@ -1,10 +1,10 @@
 
 import { describe, expect, it } from 'vitest';
-import { createInitialState, defaultBudget } from '../src/engine/economy.js';
-import { PARAMETERS } from '../src/engine/parameters.js';
-import { makeCrisis } from '../src/engine/crises.js';
-import { resolveBudgetAndYear } from '../src/engine/budget-resolution.js';
-import type { YearInputs } from '../src/engine/types.js';
+import { createInitialState, defaultBudget } from '../src/engine/economy.ts';
+import { PARAMETERS } from '../src/engine/parameters.ts';
+import { makeCrisis } from '../src/engine/crises.ts';
+import { resolveBudgetAndYear } from '../src/engine/budget-resolution.ts';
+import type { YearInputs } from '../src/engine/types.ts';
 
 const inputs: YearInputs = {
   revenueTradeModifier: 0,

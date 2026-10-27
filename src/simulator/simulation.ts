@@ -7,11 +7,11 @@ import {
   sectorNeeds,
   PARAMETERS,
   PARAMS_VERSION,
-} from '../engine/index.js';
+} from '../engine/index.ts';
 
-import type { InterestRate, TradeModifier } from '../engine/index.js';
-import { chooseBudget, STRATEGY_VERSIONS } from './strategies.js';
-import type { StrategyName } from './strategies.js';
+import type { InterestRate, TradeModifier } from '../engine/index.ts';
+import { chooseBudget, STRATEGY_VERSIONS } from './strategies.ts';
+import type { StrategyName } from './strategies.ts';
 
 export interface PublicRevenueRange {
   low: number;

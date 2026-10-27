@@ -42,6 +42,8 @@ export interface YearInputs {
   revenueTradeModifier: TradeModifier;
   interestRate: InterestRate;
   crisis: CrisisCard;
+  /** Stable per-game/per-year seed for sector need variation. */
+  needVariationSeed?: number;
   /** Extra revenue modifiers from powers, e.g. Trade deal. */
   extraRevenue?: number;
   /** Additional borrowing granted by Finance's power, if used. */

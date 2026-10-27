@@ -1,0 +1,73 @@
+import type { CountryState, Indicator, DelayedEffect } from './types.ts';
+
+export type GamePlayer = { id: string; name: string; seat: number; isBot: boolean; ministry: string; isMole: boolean; ready: boolean; avatar?: 'human-avatar-1' | 'human-avatar-2' };
+export type PublishedClue = { playerId: string; name: string; ministry: string; value: number; trueValue: number; year: number; at: number };
+export type PublicGamePlayer = Pick<GamePlayer, 'id' | 'name' | 'seat' | 'isBot' | 'ministry' | 'ready' | 'avatar'>;
+export type PublicPublishedClue = Pick<PublishedClue, 'playerId' | 'name' | 'ministry' | 'value' | 'year' | 'at'> & { trueValue?: number };
+export type PublicCountryState = Pick<CountryState, 'year' | 'economy' | 'happiness' | 'stability' | 'environment' | 'debt' | 'collapsed'> & {
+  delayedEffects: Array<Pick<DelayedEffect, 'dueYear' | 'indicator' | 'amount' | 'cause'>>;
+  collapseReasons: Indicator[];
+};
+
+type LiteGameState = {
+  version: number; status: 'waiting' | 'playing' | 'finished'; createdAt: number;
+  phase: string; phaseStartedAt: number; phaseDeadline: number | null; year: number;
+  players: GamePlayer[]; backbenchers?: Array<{id:string;name:string;portrait:string}>; yearHistory?: Array<{year:number;crisis:string;primeMinister:string;passed:boolean;shutdown?:boolean;biggestChange:string}>;
+  privateByPlayer: Record<string, { ministry: string; isMole: boolean; clue: string; trueValue: number }>;
+  publishedClues: PublishedClue[];
+  readyByPlayer: Record<string, boolean>;
+  budgetDraft: Record<string, number> | null; votes: Record<string, boolean>; result: unknown;
+  lastActionAt: Record<string, number>; chat?: unknown; country: CountryState | null;
+  lastPassedBudget: unknown; failedVotes: 0 | 1; pendingBudget: unknown;
+  voteChoices: Record<string, boolean>; crisisId: string | null; yearResolution: unknown;
+  primeMinisterId: string | null; guesses: Record<string, string>; botPlan: Record<string, unknown>;
+};
+
+export type PublicGameState = {
+  version: number; status: 'waiting' | 'playing' | 'finished'; createdAt: number;
+  phase: string; phaseStartedAt: number; phaseDeadline: number | null; year: number;
+  players: PublicGamePlayer[]; backbenchers: Array<{id:string;name:string;portrait:string}>; publishedClues: PublicPublishedClue[]; yearHistory: Array<{year:number;crisis:string;primeMinister:string;passed:boolean;shutdown?:boolean;biggestChange:string}>;
+  budgetDraft: Record<string, number> | null; votes: Record<string, boolean>; result: unknown;
+  country: PublicCountryState | null; lastPassedBudget: unknown; failedVotes: 0 | 1;
+  voteChoices: Record<string, boolean>; crisisId: string | null; yearResolution: unknown;
+  primeMinisterId: string | null; guesses: Record<string, string>;
+};
+
+function publicCountry(country: CountryState | null): PublicCountryState | null {
+  if (!country) return null;
+  return {
+    year: country.year, economy: country.economy, happiness: country.happiness,
+    stability: country.stability, environment: country.environment, debt: country.debt,
+    collapsed: country.collapsed,
+    collapseReasons: [...country.collapseReasons],
+    delayedEffects: country.delayedEffects.map(({ dueYear, indicator, amount, cause }) => ({ dueYear, indicator, amount, cause })),
+  };
+}
+
+/** Build a browser-safe snapshot by allowlisting every exposed field. */
+export function toPublicGameState(state: LiteGameState): PublicGameState {
+  return {
+    version: state.version,
+    status: state.status,
+    createdAt: state.createdAt,
+    phase: state.phase,
+    phaseStartedAt: state.phaseStartedAt,
+    phaseDeadline: state.phaseDeadline,
+    year: state.year,
+    players: state.players.map(({ id, name, seat, isBot, ministry, ready, avatar }) => ({ id, name, seat, isBot, ministry, ready, ...(avatar ? { avatar } : {}) })),
+    backbenchers: (state.backbenchers ?? []).map(({id,name,portrait})=>({id,name,portrait})),
+    yearHistory: (state.yearHistory ?? []).map(item => ({ ...item })),
+    publishedClues: state.publishedClues.map(({ playerId, name, ministry, value, trueValue, year, at }) => ({ playerId, name, ministry, value, year, at, ...(state.status === 'finished' ? { trueValue } : {}) })),
+    budgetDraft: state.budgetDraft ? { ...state.budgetDraft } : null,
+    votes: { ...state.votes },
+    result: state.result,
+    country: publicCountry(state.country),
+    lastPassedBudget: state.lastPassedBudget,
+    failedVotes: state.failedVotes,
+    voteChoices: { ...state.voteChoices },
+    crisisId: state.crisisId,
+    yearResolution: state.yearResolution,
+    primeMinisterId: state.primeMinisterId,
+    guesses: { ...state.guesses },
+  };
+}

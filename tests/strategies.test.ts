@@ -1,4 +1,4 @@
-import { createInitialState } from '../src/engine/economy.js';
+import { createInitialState } from '../src/engine/economy.ts';
 import { describe, expect, it } from 'vitest';
 import {
   canAffordRecklessTargets,
@@ -7,9 +7,9 @@ import {
   planMoleBudget,
   planRecklessBudget,
   recklessTargetSpending,
-} from '../src/simulator/strategies.js';
-import { defaultBudget } from '../src/engine/economy.js';
-import type { CountryState, Sector } from '../src/engine/types.js';
+} from '../src/simulator/strategies.ts';
+import { defaultBudget } from '../src/engine/economy.ts';
+import type { CountryState, Sector } from '../src/engine/types.ts';
 
 const needs = {
   health: 20,

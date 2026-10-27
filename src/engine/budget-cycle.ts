@@ -1,15 +1,15 @@
 
-import type { Budget } from './types.js';
-import type { CountryState, YearInputs } from './types.js';
-import type { BudgetVote } from './budget-vote.js';
-import { resolveBudgetAndYear } from './budget-resolution.js';
-import type { BudgetResolutionResult } from './budget-resolution.js';
-import type { GameFlow } from './game-flow.js';
+import type { Budget } from './types.ts';
+import type { CountryState, YearInputs } from './types.ts';
+import type { BudgetVote } from './budget-vote.ts';
+import { resolveBudgetAndYear } from './budget-resolution.ts';
+import type { BudgetResolutionResult } from './budget-resolution.ts';
+import type { GameFlow } from './game-flow.ts';
 import {
   advancePhase,
   finishGameOnCollapse,
   getCurrentPrimeMinister,
-} from './game-flow.js';
+} from './game-flow.ts';
 
 export interface BudgetCycle {  flow: GameFlow;
   country: CountryState;

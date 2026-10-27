@@ -1,12 +1,12 @@
 
-import { MINISTRY_POWER_RULES } from '../src/engine/ministry-powers.js';
+import { MINISTRY_POWER_RULES } from '../src/engine/ministry-powers.ts';
 import { describe, expect, it } from 'vitest';
-import { createGameSetup } from '../src/engine/game.js';
-import { createGameFlow } from '../src/engine/game-flow.js';
+import { createGameSetup } from '../src/engine/game.ts';
+import { createGameFlow } from '../src/engine/game-flow.ts';
 import {
   validateMinistryPower,
   type MinistryPower,
-} from '../src/engine/ministry-powers.js';
+} from '../src/engine/ministry-powers.ts';
 
 function makeFlow() {
   const setup = createGameSetup(

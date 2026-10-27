@@ -1,11 +1,11 @@
 
 import { describe, expect, it } from 'vitest';
-import { createGameSetup } from '../src/engine/game.js';
-import { createGameFlow } from '../src/engine/game-flow.js';
+import { createGameSetup } from '../src/engine/game.ts';
+import { createGameFlow } from '../src/engine/game-flow.ts';
 import {
   assertPlayerCanAct,
   assertPlayerCanUsePower,
-} from '../src/engine/player-actions.js';
+} from '../src/engine/player-actions.ts';
 
 function makeFlow() {
   const setup = createGameSetup(

@@ -1,7 +1,7 @@
 
-import type { GameFlow, GamePhase } from './game-flow.js';
-import type { GamePlayer, Ministry } from './game.js';
-import { assertPlayerCanUsePower } from './player-actions.js';
+import type { GameFlow, GamePhase } from './game-flow.ts';
+import type { GamePlayer, Ministry } from './game.ts';
+import { assertPlayerCanUsePower } from './player-actions.ts';
 
 export type MinistryPower =
   | 'emergency-loan'

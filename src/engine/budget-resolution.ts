@@ -3,11 +3,11 @@ import {
   defaultBudget,
   resolveYear,
   validateBudget,
-} from './economy.js';
-import { resolveBudgetAttempt } from './budget-vote.js';
-import type { Budget } from './types.js';
-import type { CountryState, YearInputs, YearResolution } from './types.js';
-import type { BudgetVote } from './budget-vote.js';
+} from './economy.ts';
+import { resolveBudgetAttempt } from './budget-vote.ts';
+import type { Budget } from './types.ts';
+import type { CountryState, YearInputs, YearResolution } from './types.ts';
+import type { BudgetVote } from './budget-vote.ts';
 
 export type BudgetResolutionResult =
   | {

@@ -5,7 +5,7 @@ import {
   createGameSetup,
   nextPrimeMinister,
   MINISTRY_ORDER,
-} from '../src/engine/game.js';
+} from '../src/engine/game.ts';
 
 describe('game setup', () => {
   it('creates an eight-year Standard game with one hidden Mole', () => {

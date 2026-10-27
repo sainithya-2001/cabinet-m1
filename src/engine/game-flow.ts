@@ -1,5 +1,5 @@
 
-import type { GamePlayer, GameSetup } from './game.js';
+import type { GamePlayer, GameSetup } from './game.ts';
 
 export type GamePhase =
   | 'news'

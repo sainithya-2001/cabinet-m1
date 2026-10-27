@@ -1,6 +1,6 @@
-import { createPublicRevenueRange } from '../src/simulator/simulation.js';
+import { createPublicRevenueRange } from '../src/simulator/simulation.ts';
 import { describe, expect, it } from 'vitest';
-import { createConditions, runSimulation } from '../src/simulator/simulation.js';
+import { createConditions, runSimulation } from '../src/simulator/simulation.ts';
 
 describe('public revenue range', () => {
   it('contains actual revenue and has a width of 20', () => {
