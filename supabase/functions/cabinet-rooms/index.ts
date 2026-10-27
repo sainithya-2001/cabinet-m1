@@ -35,6 +35,28 @@ type LiteState = {
   guesses: Record<string, string>;
   botPlan: Record<string, unknown>;
 };
+async function broadcastBotMoment(db: any, roomId: string, state: LiteState, moment: "clue" | "budget" | "vote") {
+  const voices: Record<string, Record<typeof moment, string[]>> = {
+    "Sir Nodsalot": { clue: ["Zzz… a number. Wake me when it becomes policy.", "I heard a figure. I voted in my sleep once."], budget: ["Zzz… those coins look adequately round.", "I support whichever budget lets me nap."], vote: ["Was that a yes? I shall nod appropriately.", "The result is in. Excellent. Back to sleep."] },
+    "Baroness Slowclap": { clue: ["👏 A 👏 figure 👏 of 👏 breathtaking 👏 ambition.", "How brave. A number without a shred of modesty."], budget: ["A budget. I shall applaud the arithmetic.", "At last, a chance to fund something with a proper entrance."], vote: ["A decision! Let us applaud the consequences.", "How decisive. Three very slow claps."] },
+    "Sir Reginald Filibuster": { clue: ["That figure requires, at minimum, a subcommittee.", "I reserve judgement until I have spoken for forty minutes."], budget: ["I move that we debate every coin individually.", "This budget is missing an appendix and a lengthy preface."], vote: ["The House has decided, though I have not finished speaking.", "I request a recount of the arguments, not the votes."] },
+    "The Hon. Member for Shouting": { clue: ["THAT NUMBER IS EITHER BRILLIANT OR A NATIONAL DISGRACE!", "I DEMAND THIS FIGURE BE READ ALOUD, LOUDER!"], budget: ["FUND SOMETHING! CUT SOMETHING! I FORGOT WHICH!", "THIS BUDGET HAS TOO MANY COINS AND NOT ENOUGH OUTRAGE!"], vote: ["THE HOUSE HAS SPOKEN! I SHALL SHOUT IT AGAIN!", "I ACCEPT THIS OUTCOME UNDER EXTREMELY LOUD PROTEST!"] },
+    "Minister Low-Battery": { clue: ["number received. processing… maybe.", "that figure has low confidence and 2% battery."], budget: ["budget uploaded. have we tried turning the economy off and on?", "coins allocated. enthusiasm not found."], vote: ["result received. reaction loading…", "my civic battery is at 1%." ] },
+    "The Paper-Tearer": { clue: ["*holds the figure up to the light, then tears it in half*", "This number has failed its paper inspection."], budget: ["*shuffles the budget papers ominously*", "Filed under ‘suspicious stationery’."], vote: ["*tears up one copy of the result, keeps another*", "The paperwork remains emotionally unofficial."] },
+    "Sir Point-of-Order": { clue: ["POINT OF ORDER: what is the evidence for that figure?", "I request a footnote for this suspiciously round number."], budget: ["POINT OF ORDER: who authorised these coins to be adjacent?", "Procedurally interesting and morally confusing."], vote: ["POINT OF ORDER: I challenge the order of this result.", "The vote is concluded; my objections are just starting."] },
+    "Lord Ribbon-Cutter": { clue: ["A splendid number. I can picture the unveiling ceremony.", "Imagine the headline. Imagine the ribbon."], budget: ["Can we unveil the health allocation with a ribbon?", "I propose a photo opportunity for each department."], vote: ["Whatever the result, I brought ceremonial scissors.", "A historic decision. Fetch the ribbon and photographer."] }
+  };
+  const available = [...(state.backbenchers ?? [])];
+  if (!available.length) return;
+  const count = Math.min(2, available.length, 1 + crypto.getRandomValues(new Uint32Array(1))[0] % 2);
+  const channel = db.channel("cabinet-chat:" + roomId);
+  for (let i = 0; i < count; i++) {
+    const bot = available.splice(crypto.getRandomValues(new Uint32Array(1))[0] % available.length, 1)[0];
+    const options = voices[bot.name]?.[moment] ?? ["The House has given me much to think about. I shall think theatrically."];
+    const message = { id: crypto.randomUUID(), playerId: bot.id, name: bot.name, text: options[crypto.getRandomValues(new Uint32Array(1))[0] % options.length], at: Date.now() + i };
+    try { await channel.send({ type: "broadcast", event: "chat-message", payload: message }); } catch (error) { console.error("Bot moment broadcast failed:", error); }
+  }
+}
 function jsonResponse(body: Record<string, unknown>, status = 200): Response { return Response.json(body, { status }); }
 type MutationResult = { state: LiteState; status?: string; changed?: boolean };
 async function mutateGameState(db: Db, roomId: string, apply: (latest: LiteState | null, roomStatus: string) => MutationResult): Promise<{ state: LiteState; status: string }> {
@@ -419,6 +441,7 @@ export default {
         const message={id:player.id+":"+published.year+":"+published.at,playerId:player.id,name:player.player_name,text:`${published.ministry}: ${published.ministry==="Finance"?"revenue is":"need is"} ${published.value}`,at:published.at,kind:"clue"};
         try { const sent=await db.channel("cabinet-chat:"+room.id).send({type:"broadcast",event:"chat-message",payload:message}); if(sent==="error") throw new Error("Could not broadcast clue."); }
         catch(e) { console.error("Clue chat broadcast failed:",e); }
+        await broadcastBotMoment(db, room.id, saved.state, "clue");
         return jsonResponse({state:publicState(saved.state),message});
       } catch(e) { return jsonResponse({error:e instanceof Error?e.message:"Could not publish clue."},409); }
     }
@@ -463,6 +486,7 @@ export default {
           const budget = liteDraftToBudget(draft), choices = botVoteChoices(latest);
           return {state:{...latest,budgetDraft:draft,pendingBudget:budget,phase:"vote",phaseStartedAt:Date.now(),phaseDeadline:Date.now()+(latest.year===1?15000:10000),votes:choices,voteChoices:choices,readyByPlayer:{}}};
         });
+        await broadcastBotMoment(db, room.id, saved.state, "budget");
         return jsonResponse({state:publicState(saved.state)});
       } catch(e) { return jsonResponse({error:e instanceof Error?e.message:"Could not submit budget."},409); }
     }
@@ -492,6 +516,7 @@ export default {
           }
           return {state:next,status:next.status};
         });
+        if (saved.state.phase !== "vote" || saved.state.result) await broadcastBotMoment(db, room.id, saved.state, "vote");
         return jsonResponse({state:publicState(saved.state)});
       } catch(e) { return jsonResponse({error:e instanceof Error?e.message:"Could not save vote."},409); }
     }
