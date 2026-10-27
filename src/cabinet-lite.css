@@ -453,3 +453,135 @@ footer { max-width:1180px; margin:auto; padding:18px 24px; display:flex; justify
     margin-top: 6px;
   }
 }
+
+
+/* Compact phone phase layout; desktop rules above remain unchanged. */
+.first-clue-hint {
+  margin: 8px 0 10px;
+  color: var(--burgundy);
+  font-size: .78rem;
+  font-style: italic;
+  line-height: 1.35;
+}
+.backbench-details > summary { cursor: pointer; }
+.backbench-details > .backbench-row { margin-top: 8px; }
+.vote-panel { padding: 15px; border: 1px solid var(--rule); background: var(--paper-light); }
+
+@media (max-width: 700px) {
+  .live-topline > .room-code-chip { display: none; }
+
+  .cabinet-seats {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 8px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding: 4px 2px 10px;
+    min-width: 0;
+  }
+  .cabinet-seat,
+  .cabinet-seat:last-child {
+    flex: 0 0 88px;
+    width: 88px;
+    min-width: 0;
+    min-height: 0;
+    grid-column: auto;
+    justify-self: auto;
+    padding: 6px 4px;
+    gap: 5px;
+  }
+  .cabinet-portrait {
+    display: block;
+    width: 72px;
+    height: 72px;
+    max-width: 72px;
+    object-fit: cover;
+  }
+  .seat-name {
+    font-size: .68rem;
+    line-height: 1.1;
+    overflow-wrap: anywhere;
+  }
+  .seat-ministry { font-size: .54rem; line-height: 1.1; overflow-wrap: anywhere; }
+  .cabinet-seat em { padding: 3px 6px; }
+
+  .backbench-details { min-width: 0; }
+  .backbench-details > summary {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    padding: 8px 4px;
+    font-weight: 800;
+    color: #fff0d2;
+    cursor: pointer;
+  }
+  .backbench-details:not([open]) > .backbench-row { display: none; }
+  .backbench-details[open] > .backbench-row {
+    display: flex;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .backbench-details .backbench-row > span { display: none; }
+
+  .chamber-chat {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .chamber-chat .chat-log {
+    flex: 0 1 auto;
+    height: auto;
+    max-height: 220px;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .chamber-chat .join-row {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .chamber-chat .join-row input { min-width: 0; flex: 1 1 auto; }
+  .chamber-chat .join-row button { flex: 0 0 auto; min-height: 44px; }
+
+  .classified-dossier,
+  .lite-budget,
+  .vote-panel {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .phase-action-panel { padding-top: 8px; padding-bottom: 8px; }
+  .phase-action-panel button,
+  .phase-action-panel input,
+  .phase-action-panel select,
+  .ready-button { min-height: 44px; }
+  .live-game > .ready-button {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    margin: 8px 0 0;
+    align-self: stretch;
+  }
+
+  .app-shell.in-game,
+  .in-game .hero,
+  .in-game .game-panel,
+  .in-game .room-details,
+  .in-game .live-game,
+  .chamber-scene,
+  .chamber-chat,
+  .phase-action-panel,
+  .backbench-details {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+  html, body, #root { max-width: 100%; min-width: 0; overflow-x: hidden; }
+  .in-game .hero,
+  .in-game .game-panel,
+  .in-game .room-details,
+  .in-game .live-game { overflow-x: hidden; }
+}
