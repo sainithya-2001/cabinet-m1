@@ -6,6 +6,7 @@ import { fallbackLiteDraft, toEngineBudget, validateLiteBudget, type LiteBudgetD
 import { mutateVersionedState } from "../../../src/engine/versioned-mutation.ts";
 import { toPublicGameState, type GamePlayer, type PublishedClue } from "../../../src/engine/public-game-state.ts";
 import { withSupabase } from "@supabase/server";
+import { BOT_POOL } from "../../../src/engine/bot-roster.ts";
 
 type RequestBody = {
   action?: unknown; roomCode?: unknown; playerName?: unknown; roomId?: unknown;
@@ -159,7 +160,7 @@ function botVoteChoices(state: LiteState): Record<string, boolean> {
 function initialLiteState(players: PlayerRow[], solo = false): LiteState {
   if (players.length < (solo ? 1 : 2) || players.length > 6) throw new Error(solo ? "Solo test mode requires one human player." : "Cabinet Lite requires 2–6 human players to start.");
   const seatRows = players.map((p) => ({ row: p, isBot: false }));
-  const botPool = shuffle([{name:"Sir Nodsalot",portrait:"sir-nodsalot"},{name:"Baroness Slowclap",portrait:"baroness-slowclap"},{name:"Sir Reginald Filibuster",portrait:"sir-reginald-fil ibuster"},{name:"The Hon. Member for Shouting",portrait:"hon-member-for-shouting"},{name:"Minister Low-Battery",portrait:"minister-low-battery"},{name:"The Paper-Tearer",portrait:"the-paper-tearer"},{name:"Sir Point-of-Order",portrait:"sir-point-of-order"},{name:"Lord Ribbon-Cutter",portrait:"lord-ribbon-cutter"}]);
+  const botPool = shuffle(BOT_POOL.map((bot) => ({ ...bot })));
   const cabinetBots=botPool.slice(0,Math.max(0,5-seatRows.length));
   for(const [index,bot] of cabinetBots.entries()) seatRows.push({row:{id:"bot-"+(index+1),player_name:bot.name,joined_at:new Date().toISOString(),player_token_hash:""},isBot:true});
   const backbenchers=botPool.slice(cabinetBots.length).map((bot,index)=>({id:"backbench-"+index,name:bot.name,portrait:bot.portrait}));
@@ -167,10 +168,14 @@ function initialLiteState(players: PlayerRow[], solo = false): LiteState {
   const ministries = ministryOrder.slice(0, seatRows.length);
   // The Mole may be any cabinet member, including a bot, as specified by the game rules.
   const moleIndex = crypto.getRandomValues(new Uint32Array(1))[0] % seatRows.length;
-  const gamePlayers: GamePlayer[] = seatRows.map((item, seat) => ({
-    id: item.row.id, name: item.row.player_name, seat, isBot: item.isBot,
-    ministry: ministries[seat], isMole: seat === moleIndex, ready: false,
-  }));
+  let humanJoinIndex = 0;
+  const gamePlayers: GamePlayer[] = seatRows.map((item, seat) => {
+    const avatar = item.isBot ? undefined : (humanJoinIndex++ % 2 === 0 ? "human-avatar-1" : "human-avatar-2");
+    return {
+      id: item.row.id, name: item.row.player_name, seat, isBot: item.isBot, avatar,
+      ministry: ministries[seat], isMole: seat === moleIndex, ready: false,
+    };
+  });
   const initialCountry = createInitialState();
   const initialCrisisId = CRISIS_TEMPLATES[crypto.getRandomValues(new Uint32Array(1))[0] % CRISIS_TEMPLATES.length].id;
   const privateByPlayer: LiteState["privateByPlayer"] = {};

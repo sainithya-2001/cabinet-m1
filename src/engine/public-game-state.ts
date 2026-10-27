@@ -1,8 +1,8 @@
 import type { CountryState, Indicator, DelayedEffect } from './types.ts';
 
-export type GamePlayer = { id: string; name: string; seat: number; isBot: boolean; ministry: string; isMole: boolean; ready: boolean };
+export type GamePlayer = { id: string; name: string; seat: number; isBot: boolean; ministry: string; isMole: boolean; ready: boolean; avatar?: 'human-avatar-1' | 'human-avatar-2' };
 export type PublishedClue = { playerId: string; name: string; ministry: string; value: number; trueValue: number; year: number; at: number };
-export type PublicGamePlayer = Pick<GamePlayer, 'id' | 'name' | 'seat' | 'isBot' | 'ministry' | 'ready'>;
+export type PublicGamePlayer = Pick<GamePlayer, 'id' | 'name' | 'seat' | 'isBot' | 'ministry' | 'ready' | 'avatar'>;
 export type PublicPublishedClue = Pick<PublishedClue, 'playerId' | 'name' | 'ministry' | 'value' | 'year' | 'at'> & { trueValue?: number };
 export type PublicCountryState = Pick<CountryState, 'year' | 'economy' | 'happiness' | 'stability' | 'environment' | 'debt' | 'collapsed'> & {
   delayedEffects: Array<Pick<DelayedEffect, 'dueYear' | 'indicator' | 'amount' | 'cause'>>;
@@ -54,7 +54,7 @@ export function toPublicGameState(state: LiteGameState): PublicGameState {
     phaseStartedAt: state.phaseStartedAt,
     phaseDeadline: state.phaseDeadline,
     year: state.year,
-    players: state.players.map(({ id, name, seat, isBot, ministry, ready }) => ({ id, name, seat, isBot, ministry, ready })),
+    players: state.players.map(({ id, name, seat, isBot, ministry, ready, avatar }) => ({ id, name, seat, isBot, ministry, ready, ...(avatar ? { avatar } : {}) })),
     backbenchers: (state.backbenchers ?? []).map(({id,name,portrait})=>({id,name,portrait})),
     publishedClues: state.publishedClues.map(({ playerId, name, ministry, value, trueValue, year, at }) => ({ playerId, name, ministry, value, year, at, ...(state.status === 'finished' ? { trueValue } : {}) })),
     budgetDraft: state.budgetDraft ? { ...state.budgetDraft } : null,
