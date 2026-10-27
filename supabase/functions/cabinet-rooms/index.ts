@@ -1,5 +1,5 @@
 import { liteCollapseVerdict } from "../../../src/engine/lite-collapse.ts";
-import { calculateYearFinances, createInitialState, defaultBudget, resolveYear, sectorNeeds } from "../../../src/engine/economy.ts";
+import { calculateYearFinances, createInitialState, defaultBudget, resolveYear, sectorNeeds, yearNeedVariationSeed } from "../../../src/engine/economy.ts";
 import { makeCrisis, CRISIS_TEMPLATES } from "../../../src/engine/crises.ts";
 import type { Budget, CountryState, YearInputs } from "../../../src/engine/types.ts";
 import { fallbackLiteDraft, toEngineBudget, validateLiteBudget, type LiteBudgetDraft } from "../../../src/engine/lite-budget.ts";
@@ -7,6 +7,7 @@ import { mutateVersionedState } from "../../../src/engine/versioned-mutation.ts"
 import { toPublicGameState, type GamePlayer, type PublishedClue } from "../../../src/engine/public-game-state.ts";
 import { withSupabase } from "@supabase/server";
 import { BOT_POOL } from "../../../src/engine/bot-roster.ts";
+import { botClueValue } from "../../../src/engine/bot-clues.ts";
 
 type RequestBody = {
   action?: unknown; roomCode?: unknown; playerName?: unknown; roomId?: unknown;
@@ -81,9 +82,9 @@ function makePrivateClue(ministry: string): string {
   return clues[ministry] ?? "Watch the budget and look for inconsistencies in other ministers' claims.";
 }
 function publicState(state: LiteState) { return toPublicGameState(state); }
-function trueClueValue(ministry: string, country: CountryState, crisisId: string): number {
+function trueClueValue(ministry: string, country: CountryState, crisisId: string, createdAt: number, year: number): number {
   const crisis = makeCrisis(crisisId, 2);
-  const inputs: YearInputs = { revenueTradeModifier: 0, interestRate: 0.05, crisis };
+  const inputs: YearInputs = { revenueTradeModifier: 0, interestRate: 0.05, crisis, needVariationSeed: yearNeedVariationSeed(createdAt, year) };
   if (ministry === "Finance") return calculateYearFinances(country, defaultBudget(), inputs).revenue;
   const needs = sectorNeeds(inputs);
   if (ministry === "Health") return needs.health;
@@ -178,9 +179,10 @@ function initialLiteState(players: PlayerRow[], solo = false): LiteState {
   });
   const initialCountry = createInitialState();
   const initialCrisisId = CRISIS_TEMPLATES[crypto.getRandomValues(new Uint32Array(1))[0] % CRISIS_TEMPLATES.length].id;
+  const createdAt = Date.now();
   const privateByPlayer: LiteState["privateByPlayer"] = {};
   for (const player of gamePlayers) {
-    const trueValue = trueClueValue(player.ministry, initialCountry, initialCrisisId);
+    const trueValue = trueClueValue(player.ministry, initialCountry, initialCrisisId, createdAt, 1);
     privateByPlayer[player.id] = {
       ministry: player.ministry, isMole: player.isMole, trueValue,
       clue: player.isMole ? "You are the Mole. Secretly undermine the government without revealing yourself." : makePrivateClue(player.ministry),
@@ -192,7 +194,7 @@ function initialLiteState(players: PlayerRow[], solo = false): LiteState {
   const first = crypto.getRandomValues(new Uint32Array(1))[0] % humans.length;
   const ordered = [...humans.slice(first), ...humans.slice(0, first), ...bots].map((p, seat) => ({...p, seat}));
   return {
-    version: 1, status: "playing", createdAt: Date.now(), phase: "headline",
+    version: 1, status: "playing", createdAt, phase: "headline",
     phaseStartedAt: Date.now(), phaseDeadline: Date.now() + 4000, year: 1,
     players: ordered, backbenchers, privateByPlayer, publishedClues: [], readyByPlayer: {},
     budgetDraft: null, votes: {}, result: null, lastActionAt: {},
@@ -303,7 +305,7 @@ export default {
               for (const bot of dueBots) {
                 const secret = state.privateByPlayer[bot.id]; if (!secret) continue;
                 const truth = secret.trueValue;
-                const value = secret.isMole ? (bot.ministry === "Finance" ? Math.max(60, Math.min(140, truth + (truth >= 100 ? -18 : 18))) : Math.max(0, Math.min(60, truth + (truth >= 30 ? -8 : 8)))) : truth;
+                const value = botClueValue(bot.name, bot.ministry, truth, secret.isMole);
                 published.push({playerId:bot.id,name:bot.name,ministry:secret.ministry,value,trueValue:truth,year:state.year,at:now});
               }
               next = {...next,publishedClues:published,version:next.version+1};
@@ -322,7 +324,7 @@ export default {
                     const no=Object.values(choices).filter(v=>v===false).length;
                     if(yes>no) {
                       const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
-                      const resolution=resolveYear(state.country,state.pendingBudget,{revenueTradeModifier:0,interestRate:0.05,crisis});
+                      const resolution=resolveYear(state.country,state.pendingBudget,{revenueTradeModifier:0,interestRate:0.05,crisis,needVariationSeed:yearNeedVariationSeed(state.createdAt,state.year)});
                       next={...applyYearResolution(state,resolution,state.pendingBudget,now,{passed:true,yes,no}),version:state.version+1};
                     } else if(state.failedVotes===0) {
                       // A failed first vote hands the redraft to the next seat, including bot seats.
@@ -339,7 +341,7 @@ export default {
                     } else {
                       const fallback=state.lastPassedBudget ?? fallbackEngineBudget();
                       const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
-                      const resolution=resolveYear(state.country,fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true});
+                      const resolution=resolveYear(state.country,fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true,needVariationSeed:yearNeedVariationSeed(state.createdAt,state.year)});
                       next={...applyYearResolution(state,resolution,fallback,now,{passed:false,shutdown:true,yes,no}),version:state.version+1};
                     }
                   } else if(state.phase==="budget") {
@@ -348,7 +350,7 @@ export default {
                     const usableDraft = currentDraft && validateLiteBudget(currentDraft as LiteBudgetDraft).length === 0 ? currentDraft : fallbackLiteDraft();
                     const fallback = liteDraftToBudget(usableDraft);
                     const crisis=makeCrisis(state.crisisId ?? CRISIS_TEMPLATES[0].id,2);
-                    const resolution=resolveYear(state.country ?? createInitialState(),fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true});
+                    const resolution=resolveYear(state.country ?? createInitialState(),fallback,{revenueTradeModifier:0,interestRate:0.05,crisis,shutdown:true,needVariationSeed:yearNeedVariationSeed(state.createdAt,state.year)});
                     next={...applyYearResolution(state,resolution,fallback,now,{passed:false,shutdown:true,reason:"Budget deadline expired"}),version:state.version+1};
                   } else if(state.phase==="clue" && state.players.find(p=>p.id===state.primeMinisterId)?.isBot) {
                     // Bot PMs draft automatically; they must not trigger a fake missed-deadline shutdown.
@@ -367,7 +369,7 @@ export default {
                       for (const minister of state.players) {
                         const previous = privateByPlayer[minister.id];
                         if (!previous) continue;
-                        const trueValue = state.country && state.crisisId ? trueClueValue(minister.ministry, state.country, state.crisisId) : previous.trueValue;
+                        const trueValue = state.country && state.crisisId ? trueClueValue(minister.ministry, state.country, state.crisisId, state.createdAt, year) : previous.trueValue;
                         privateByPlayer[minister.id] = { ...previous, trueValue };
                       }
                       next={...state,year,privateByPlayer,primeMinisterId:nextPm?.id ?? state.players[0]?.id ?? null,phase:"headline",phaseStartedAt:now,phaseDeadline:now+4000,readyByPlayer:{},budgetDraft:null,votes:{},voteChoices:{},pendingBudget:null,failedVotes:0,version:state.version+1};
@@ -474,7 +476,7 @@ export default {
           if (allVoted || (latest.phaseDeadline!==null && now>=latest.phaseDeadline)) {
             const yes=Object.values(choices).filter(Boolean).length, no=Object.values(choices).filter(v=>!v).length;
             if (yes>no) {
-              const resolution=resolveYear(latest.country,latest.pendingBudget,{revenueTradeModifier:0,interestRate:0.05,crisis:makeCrisis(latest.crisisId??CRISIS_TEMPLATES[0].id,2)});
+              const resolution=resolveYear(latest.country,latest.pendingBudget,{revenueTradeModifier:0,interestRate:0.05,crisis:makeCrisis(latest.crisisId??CRISIS_TEMPLATES[0].id,2),needVariationSeed:yearNeedVariationSeed(latest.createdAt,latest.year)});
               next={...applyYearResolution(next,resolution,latest.pendingBudget,now,{passed:true,yes,no})};
             } else if (latest.failedVotes===0) {
               const ix=latest.players.findIndex(p=>p.id===latest.primeMinisterId), pm=latest.players[(ix+1+latest.players.length)%latest.players.length];
@@ -482,7 +484,7 @@ export default {
               else next={...next,failedVotes:1,primeMinisterId:pm?.id??null,phase:"budget",phaseStartedAt:now,phaseDeadline:now+20000,pendingBudget:null,budgetDraft:null,voteChoices:{},votes:{},result:{passed:false,yes,no,redraftBy:pm?.id}};
             } else {
               const fallback=latest.lastPassedBudget ?? fallbackEngineBudget();
-              const resolution=resolveYear(latest.country,fallback,{revenueTradeModifier:0,interestRate:0.05,crisis:makeCrisis(latest.crisisId??CRISIS_TEMPLATES[0].id,2),shutdown:true});
+              const resolution=resolveYear(latest.country,fallback,{revenueTradeModifier:0,interestRate:0.05,crisis:makeCrisis(latest.crisisId??CRISIS_TEMPLATES[0].id,2),shutdown:true,needVariationSeed:yearNeedVariationSeed(latest.createdAt,latest.year)});
               next={...applyYearResolution(next,resolution,fallback,now,{passed:false,shutdown:true,yes,no})};
             }
           }

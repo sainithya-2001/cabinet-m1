@@ -58,11 +58,28 @@ function resolveIndicator(before: number, rawLines: { cause: string; raw: number
   return { before, unclamped, after, lines };
 }
 
+export function yearNeedVariationSeed(createdAt: number, year: number): number {
+  return (Math.imul(createdAt >>> 0, 31) + Math.imul(year, 0x9e3779b9)) >>> 0;
+}
+function seededSectorUnit(seed: number, sector: string): number {
+  let hash = seed >>> 0;
+  for (let i = 0; i < sector.length; i++) hash = Math.imul(hash ^ sector.charCodeAt(i), 16777619) >>> 0;
+  hash ^= hash >>> 16; hash = Math.imul(hash, 0x7feb352d) >>> 0;
+  hash ^= hash >>> 15; hash = Math.imul(hash, 0x846ca68b) >>> 0;
+  hash ^= hash >>> 16;
+  return (hash >>> 0) / 0x1_0000_0000;
+}
 export function sectorNeeds(inputs: YearInputs): Record<Exclude<Sector, 'debtRepayment'>, number> {
   const needs = { ...PARAMETERS.sectorNeeds };
   for (const [sector, amount] of Object.entries(inputs.crisis.needChanges)) {
     const key = sector as keyof typeof needs;
     needs[key] += amount ?? 0;
+  }
+  if (inputs.needVariationSeed !== undefined) {
+    for (const sector of Object.keys(needs) as Array<keyof typeof needs>) {
+      const multiplier = 0.8 + seededSectorUnit(inputs.needVariationSeed, sector) * 0.4;
+      needs[sector] = Math.max(0, Math.round(needs[sector] * multiplier));
+    }
   }
   return needs;
 }
