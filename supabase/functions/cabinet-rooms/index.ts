@@ -30,6 +30,7 @@ type LiteState = {
   voteChoices: Record<string, boolean>;
   crisisId: string | null;
   yearResolution: unknown;
+  yearHistory?: Array<{year:number;crisis:string;primeMinister:string;passed:boolean;shutdown?:boolean;biggestChange:string}>;
   primeMinisterId: string | null;
   guesses: Record<string, string>;
   botPlan: Record<string, unknown>;
@@ -116,6 +117,7 @@ function applyYearResolution(
   const collapsed = resolution.state.collapsed;
   return {
     ...state,
+    yearHistory: [...(state.yearHistory ?? []), (() => { const changes = Object.entries(resolution.changes).flatMap(([indicator, change]) => change.lines.filter(line => line.rounded !== 0).map(line => ({ indicator, cause: line.cause, rounded: line.rounded }))).sort((a,b) => Math.abs(b.rounded)-Math.abs(a.rounded)); const pm = state.players.find(p => p.id === state.primeMinisterId)?.name ?? 'Unknown PM'; const crisis = state.crisisId ? makeCrisis(state.crisisId, 2).name : 'Unknown crisis'; return { year: state.year, crisis, primeMinister: pm, passed: resultDetails.passed === true, ...(resultDetails.shutdown === true ? { shutdown: true } : {}), biggestChange: changes[0] ? `${changes[0].indicator} ${changes[0].rounded > 0 ? '+' : ''}${changes[0].rounded} (${changes[0].cause})` : 'no major indicator change' }; })()],
     country: resolution.state,
     lastPassedBudget: budget,
     yearResolution: resolution,
@@ -197,7 +199,7 @@ function initialLiteState(players: PlayerRow[], solo = false): LiteState {
     version: 1, status: "playing", createdAt, phase: "headline",
     phaseStartedAt: Date.now(), phaseDeadline: Date.now() + 4000, year: 1,
     players: ordered, backbenchers, privateByPlayer, publishedClues: [], readyByPlayer: {},
-    budgetDraft: null, votes: {}, result: null, lastActionAt: {},
+    budgetDraft: null, votes: {}, result: null, lastActionAt: {}, yearHistory: [],
     country: initialCountry, lastPassedBudget: null, failedVotes: 0,
     pendingBudget: null, voteChoices: {}, crisisId: initialCrisisId, yearResolution: null,
     primeMinisterId: ordered.find(p => !p.isBot)?.id ?? null, guesses: {}, botPlan: {},

@@ -247,3 +247,39 @@ footer { max-width:1180px; margin:auto; padding:18px 24px; display:flex; justify
 @media(max-width:600px) { .app-shell.in-game { padding-left:8px; padding-right:8px; } .live-game { display:flex; flex-direction:column; width:100%; min-width:0; } .phase-action-panel { width:100%; min-width:0; } .times-table { min-width:600px; } }
 
 .speaker-phase-row{display:grid;grid-template-columns:minmax(260px,1fr) minmax(260px,1fr);align-items:center;gap:18px;grid-column:1/-1}.speaker-phase-row .speaker-banner{justify-content:flex-start}.speaker-phase-row .phase-status{border:0;padding:10px}@media(min-width:1000px){.live-game>.speaker-phase-row{grid-column:1/-1;grid-row:3}.live-game>.phase-action-panel{grid-column:1/-1;grid-row:4}.live-game>.chamber-scene,.live-game>.chamber-chat{grid-row:5}}@media(max-width:999px){.speaker-phase-row{display:flex;flex-direction:column;align-items:stretch;gap:0}.speaker-phase-row .speaker-banner{justify-content:flex-start}}
+
+/* Narrow-phone finale and HUD hardening */
+.indicator-label-short { display:none; }
+.mole-reveal { min-width:0; }
+.mole-reveal-portrait { width:160px; max-width:100%; height:auto; max-height:200px; object-fit:cover; flex:0 1 160px; }
+.mole-reveal>div { min-width:0; overflow-wrap:anywhere; }
+.veloria-times,.times-masthead,.times-table-wrap,.times-table,.year-summary-list,.live-game,.game-panel,.room-details { min-width:0; }
+.veloria-times,.veloria-times * { overflow-wrap:anywhere; }
+@media(max-width:600px) {
+  .indicator-label-full { display:none; }
+  .indicator-label-short { display:inline; }
+  .indicator-gauges { grid-template-columns:repeat(5,minmax(0,1fr)); min-width:0; width:100%; }
+  .indicator-gauge>span { align-items:center; flex-wrap:wrap; justify-content:center; gap:2px; text-align:center; }
+  .indicator-gauge>span b { display:block; width:100%; }
+  .mole-reveal { flex-direction:column; align-items:center; text-align:center; gap:10px; }
+  .mole-reveal-portrait { width:160px; max-width:100%; max-height:160px; flex:0 0 auto; }
+  .mole-reveal>div { width:100%; }
+  .times-table-wrap { overflow:visible; }
+  .times-table { display:block; width:100%; min-width:0; }
+  .times-table thead { display:none; }
+  .times-table tbody { display:grid; gap:10px; min-width:0; }
+  .times-table tr { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px 10px; min-width:0; padding:10px; border:1px solid #c7b79c; background:#fffdf7; }
+  .times-table td { display:block; min-width:0; padding:4px 0; border:0; overflow-wrap:anywhere; }
+  .times-table td::before { content:attr(data-label); display:block; margin-bottom:2px; color:var(--muted); font:800 .62rem Arial,sans-serif; letter-spacing:.05em; text-transform:uppercase; }
+  .times-table td[data-label="Year"] { grid-column:1; }
+  .times-table td[data-label="Minister"] { grid-column:1/-1; font-weight:800; }
+  .times-table td[data-label="Published"],.times-table td[data-label="True"] { grid-column:span 1; }
+  .times-table td[data-label="Verdict"] { grid-column:1/-1; padding-top:7px; border-top:1px solid #d9cbb3; }
+  .times-table td.mobile-hide { display:none; }
+  .times-table .clue-lie { background:#f4d7d3; }
+  .times-table .clue-habit { background:#fff0c2; }
+  .live-game,.game-panel,.room-details,.app-shell.in-game,.hero { width:100%; max-width:100%; min-width:0; }
+  .hero,.game-panel,.room-details,.live-game { overflow-x:clip; }
+  .speaker-phase-row,.phase-status,.speaker-banner,.phase-tracker,.chamber-scene,.chamber-chat { min-width:0; max-width:100%; }
+  .speaker-order-bubble { min-width:0; overflow-wrap:anywhere; }
+}

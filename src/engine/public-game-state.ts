@@ -12,7 +12,7 @@ export type PublicCountryState = Pick<CountryState, 'year' | 'economy' | 'happin
 type LiteGameState = {
   version: number; status: 'waiting' | 'playing' | 'finished'; createdAt: number;
   phase: string; phaseStartedAt: number; phaseDeadline: number | null; year: number;
-  players: GamePlayer[]; backbenchers?: Array<{id:string;name:string;portrait:string}>;
+  players: GamePlayer[]; backbenchers?: Array<{id:string;name:string;portrait:string}>; yearHistory?: Array<{year:number;crisis:string;primeMinister:string;passed:boolean;shutdown?:boolean;biggestChange:string}>;
   privateByPlayer: Record<string, { ministry: string; isMole: boolean; clue: string; trueValue: number }>;
   publishedClues: PublishedClue[];
   readyByPlayer: Record<string, boolean>;
@@ -26,7 +26,7 @@ type LiteGameState = {
 export type PublicGameState = {
   version: number; status: 'waiting' | 'playing' | 'finished'; createdAt: number;
   phase: string; phaseStartedAt: number; phaseDeadline: number | null; year: number;
-  players: PublicGamePlayer[]; backbenchers: Array<{id:string;name:string;portrait:string}>; publishedClues: PublicPublishedClue[];
+  players: PublicGamePlayer[]; backbenchers: Array<{id:string;name:string;portrait:string}>; publishedClues: PublicPublishedClue[]; yearHistory: Array<{year:number;crisis:string;primeMinister:string;passed:boolean;shutdown?:boolean;biggestChange:string}>;
   budgetDraft: Record<string, number> | null; votes: Record<string, boolean>; result: unknown;
   country: PublicCountryState | null; lastPassedBudget: unknown; failedVotes: 0 | 1;
   voteChoices: Record<string, boolean>; crisisId: string | null; yearResolution: unknown;
@@ -56,6 +56,7 @@ export function toPublicGameState(state: LiteGameState): PublicGameState {
     year: state.year,
     players: state.players.map(({ id, name, seat, isBot, ministry, ready, avatar }) => ({ id, name, seat, isBot, ministry, ready, ...(avatar ? { avatar } : {}) })),
     backbenchers: (state.backbenchers ?? []).map(({id,name,portrait})=>({id,name,portrait})),
+    yearHistory: (state.yearHistory ?? []).map(item => ({ ...item })),
     publishedClues: state.publishedClues.map(({ playerId, name, ministry, value, trueValue, year, at }) => ({ playerId, name, ministry, value, year, at, ...(state.status === 'finished' ? { trueValue } : {}) })),
     budgetDraft: state.budgetDraft ? { ...state.budgetDraft } : null,
     votes: { ...state.votes },

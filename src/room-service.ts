@@ -93,7 +93,7 @@ export type PublicGamePlayer = {
 export type PublicGameState = {
   version: number; status: 'waiting' | 'playing' | 'finished'; createdAt: number;
   phase: string; phaseStartedAt: number; phaseDeadline: number | null; year: number;
-  players: PublicGamePlayer[]; backbenchers: Array<{id:string;name:string;portrait:string}>; publishedClues: Array<{playerId:string;name:string;ministry:string;value:number;year:number;at:number}>;
+  players: PublicGamePlayer[]; backbenchers: Array<{id:string;name:string;portrait:string}>; publishedClues: Array<{playerId:string;name:string;ministry:string;value:number;year:number;at:number}>; yearHistory?: Array<{year:number;crisis:string;primeMinister:string;passed:boolean;shutdown?:boolean;biggestChange:string}>;
   budgetDraft: Record<string, number> | null; votes: Record<string, boolean>; result: unknown;
   primeMinisterId?: string | null; voteChoices?: Record<string, boolean>; guesses?: Record<string, string>; yearResolution?: unknown;
   country?: { economy:number; happiness:number; stability:number; environment:number; debt:number; collapsed:boolean; collapseReasons:string[] } | null;
