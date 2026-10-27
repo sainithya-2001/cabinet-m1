@@ -317,3 +317,139 @@ footer { max-width:1180px; margin:auto; padding:18px 24px; display:flex; justify
   .indicator-gauge .indicator-label-short { display:block; width:100%; min-height:1.2em; white-space:nowrap; text-align:center; letter-spacing:.02em; }
   .indicator-gauge>i { width:100%; margin-top:5px; }
 }
+
+
+/* Phone-only layout correction: give HUD and phase copy their own rows. */
+@media (max-width: 700px) {
+  .app-shell.in-game,
+  .in-game .hero,
+  .in-game .game-panel,
+  .in-game .room-details,
+  .in-game .live-game,
+  .live-game > *,
+  .live-topline > *,
+  .speaker-phase-row,
+  .speaker-banner,
+  .speaker-banner > *,
+  .phase-status,
+  .phase-status > * {
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .app-shell.in-game,
+  .in-game .hero,
+  .in-game .game-panel,
+  .in-game .room-details,
+  .in-game .live-game {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .live-topline {
+    display: flex;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .live-topline > .indicator-gauges {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px 14px;
+  }
+
+  .indicator-gauge {
+    min-width: 0;
+  }
+
+  .indicator-gauge > span {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 4px;
+    min-width: 0;
+    min-height: 2.4em;
+    line-height: 1.15;
+    text-align: center;
+  }
+
+  .indicator-gauge .indicator-label-short {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  .indicator-gauge > i {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    margin-top: 4px;
+  }
+
+  .speaker-phase-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .speaker-phase-row .speaker-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .speaker-phase-row .speaker-banner > img {
+    flex: 0 0 82px;
+    width: 82px;
+    height: 82px;
+    max-width: 100%;
+  }
+
+  .speaker-phase-row .speaker-order-bubble {
+    flex: 1 1 160px;
+    min-width: 160px;
+    max-width: calc(100% - 94px);
+  }
+
+  .speaker-phase-row .speaker-order-bubble strong {
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+
+  .speaker-phase-row .phase-status {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    padding: 10px 0;
+  }
+
+  .speaker-phase-row .phase-status > div {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .speaker-phase-row .phase-status h2,
+  .speaker-phase-row .phase-status p {
+    max-width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .speaker-phase-row .phase-status h2 {
+    margin-top: 6px;
+  }
+}
