@@ -105,7 +105,7 @@ async function broadcastBotMoment(db: any, roomId: string, state: LiteState, mom
     const bot = choices[crypto.getRandomValues(new Uint32Array(1))[0] % choices.length];
     const sector = sectorNames[["health","education","security","environment","economy"][i % 5]];
     const amount = state.pendingBudget?.[sector.toLowerCase()] ?? state.budgetDraft?.[sector.toLowerCase()] ?? 0;
-    const clue = initialClue ? initialClue.name + " says " + (initialClue.ministry === "Finance" ? "revenue is " : initialClue.ministry + " need is ") + initialClue.value : "the published figures";
+    const clue = initialClue ? initialClue.name + (initialClue.name.endsWith("s") ? "\'" : "\'s") + (initialClue.ministry === "Finance" ? " revenue figure of " + initialClue.value : " " + initialClue.ministry + " number (" + initialClue.value + ")") : "the published figures";
     const context = {n:String(amount),sector,clue,votes:voteNames.slice(-2).join("; ") || "no recorded votes",change};
     const templates = voices[bot.name]?.[moment] ?? [];
     const candidates = templates.map(line => line.replace(/\{(n|sector|clue|votes|change)\}/g, (_, key) => context[key as keyof typeof context]));
