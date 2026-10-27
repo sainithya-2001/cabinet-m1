@@ -29,6 +29,7 @@ type LiteState = {
   pendingBudget: Budget | null;
   voteChoices: Record<string, boolean>;
   crisisId: string | null;
+  usedCrisisIds?: string[];
   yearResolution: unknown;
   yearHistory?: Array<{year:number;crisis:string;primeMinister:string;passed:boolean;shutdown?:boolean;biggestChange:string}>;
   primeMinisterId: string | null;
@@ -91,7 +92,9 @@ async function broadcastBotMoment(db: any, roomId: string, state: LiteState, mom
   const sectorNames: Record<string,string> = {health:"Health",education:"Education",security:"Security",environment:"Environment",economy:"Economy"};
   const result = state.result as {resolution?:{changes?:Record<string,{before:number;after:number}>}} | null;
   const stability = result?.resolution?.changes?.stability;
-  const change = stability ? (stability.after < stability.before ? "down " : "up ") + Math.abs(stability.after-stability.before) : "changed";
+  const stabilityDelta = stability ? stability.after - stability.before : null;
+  if (moment === "result" && (stabilityDelta === null || stabilityDelta === 0)) return;
+  const change = stability ? (stability.after < stability.before ? "down " : "up ") + Math.abs(stabilityDelta!) : "changed";
   const voteNames = state.players.filter(p => state.voteChoices?.[p.id] !== undefined).map(p => p.name + " voted " + (state.voteChoices[p.id] ? "aye" : "no"));
   const available = [...(state.backbenchers ?? []), ...(state.players ?? []).filter(p => p.isBot).map(p => ({id:p.id,name:p.name,portrait:p.avatar ?? ""}))];
   if (!available.length) return;
@@ -105,6 +108,7 @@ async function broadcastBotMoment(db: any, roomId: string, state: LiteState, mom
     const bot = choices[crypto.getRandomValues(new Uint32Array(1))[0] % choices.length];
     const sector = sectorNames[["health","education","security","environment","economy"][i % 5]];
     const amount = state.pendingBudget?.[sector.toLowerCase()] ?? state.budgetDraft?.[sector.toLowerCase()] ?? 0;
+    if (moment === "budget" && amount === 0) { available.splice(available.findIndex(b => b.id === bot.id), 1); i--; continue; }
     const clue = initialClue ? initialClue.name + (initialClue.name.endsWith("s") ? "\'" : "\'s") + (initialClue.ministry === "Finance" ? " revenue figure of " + initialClue.value : " " + initialClue.ministry + " number (" + initialClue.value + ")") : "the published figures";
     const context = {n:String(amount),sector,clue,votes:voteNames.slice(-2).join("; ") || "no recorded votes",change};
     const templates = voices[bot.name]?.[moment] ?? [];
@@ -293,7 +297,7 @@ function initialLiteState(players: PlayerRow[], solo = false): LiteState {
     players: ordered, backbenchers, privateByPlayer, publishedClues: [], readyByPlayer: {},
     budgetDraft: null, votes: {}, result: null, lastActionAt: {}, yearHistory: [],
     country: initialCountry, lastPassedBudget: null, failedVotes: 0,
-    pendingBudget: null, voteChoices: {}, crisisId: initialCrisisId, yearResolution: null,
+    pendingBudget: null, voteChoices: {}, crisisId: initialCrisisId, usedCrisisIds: [initialCrisisId], yearResolution: null,
     primeMinisterId: ordered.find(p => !p.isBot)?.id ?? null, guesses: {}, botPlan: {},
   };
 }
@@ -459,14 +463,18 @@ export default {
                       // PM rotation follows the ordered seats: all humans get their turn before bots.
                       const currentIndex=state.players.findIndex(p=>p.id===state.primeMinisterId);
                       const nextPm=state.players[(currentIndex+1+state.players.length)%state.players.length];
+                      const usedCrisisIds = state.usedCrisisIds ?? [state.crisisId].filter((id): id is string => Boolean(id));
+                      const unusedCrises = CRISIS_TEMPLATES.filter(crisis => !usedCrisisIds.includes(crisis.id));
+                      const nextCrisis = unusedCrises[crypto.getRandomValues(new Uint32Array(1))[0] % Math.max(1, unusedCrises.length)] ?? CRISIS_TEMPLATES[0];
+                      const nextCrisisId = nextCrisis.id;
                       const privateByPlayer = { ...state.privateByPlayer };
                       for (const minister of state.players) {
                         const previous = privateByPlayer[minister.id];
                         if (!previous) continue;
-                        const trueValue = state.country && state.crisisId ? trueClueValue(minister.ministry, state.country, state.crisisId, state.createdAt, year) : previous.trueValue;
+                        const trueValue = state.country ? trueClueValue(minister.ministry, state.country, nextCrisisId, state.createdAt, year) : previous.trueValue;
                         privateByPlayer[minister.id] = { ...previous, trueValue };
                       }
-                      next={...state,year,privateByPlayer,primeMinisterId:nextPm?.id ?? state.players[0]?.id ?? null,phase:"headline",phaseStartedAt:now,phaseDeadline:now+4000,readyByPlayer:{},budgetDraft:null,votes:{},voteChoices:{},pendingBudget:null,failedVotes:0,version:state.version+1};
+                      next={...state,year,crisisId:nextCrisisId,usedCrisisIds:[...usedCrisisIds,nextCrisisId],privateByPlayer,primeMinisterId:nextPm?.id ?? state.players[0]?.id ?? null,phase:"headline",phaseStartedAt:now,phaseDeadline:now+4000,readyByPlayer:{},budgetDraft:null,votes:{},voteChoices:{},pendingBudget:null,failedVotes:0,version:state.version+1};
                     }
                   } else if(state.phase==="guess") {
                     status="finished";
@@ -508,7 +516,8 @@ export default {
         });
         const published=saved.state.publishedClues.find(c=>c.playerId===player.id&&c.year===saved.state.year);
         if(!published) throw new Error("Published clue was not saved.");
-        const message={id:player.id+":"+published.year+":"+published.at,playerId:player.id,name:player.player_name,text:`${published.ministry}: ${published.ministry==="Finance"?"revenue is":"need is"} ${published.value}`,at:published.at,kind:"clue"};
+        const coinNote=published.ministry==="Finance"?"":" (≈ "+Math.max(0,Math.round(published.value/10))+" coins)";
+        const message={id:player.id+":"+published.year+":"+published.at,playerId:player.id,name:player.player_name,text:published.ministry+": "+(published.ministry==="Finance"?"revenue is":"need is")+" "+published.value+coinNote,at:published.at,kind:"clue"};
         try { const sent=await db.channel("cabinet-chat:"+room.id).send({type:"broadcast",event:"chat-message",payload:message}); if(sent==="error") throw new Error("Could not broadcast clue."); }
         catch(e) { console.error("Clue chat broadcast failed:",e); }
         await broadcastBotMoment(db, room.id, saved.state, "clue");
