@@ -233,6 +233,9 @@ footer { max-width:1180px; margin:auto; padding:18px 24px; display:flex; justify
 .times-table th,.times-table td { padding:8px 10px; text-align:left; border-bottom:1px solid #c7b79c; }
 .times-table th { background:#e7dac1; text-transform:uppercase; font-size:.7rem; letter-spacing:.06em; }
 .times-table .clue-lie { background:#f4d7d3; color:#7b1e2b; font-weight:800; }
+.times-table .clue-habit { background:#fff0c2; color:#76520b; }
+.clue-habit-badge { display:inline-block; padding:3px 7px; border-radius:3px; background:#f3c969; color:#624300; font-size:.7rem; font-weight:900; letter-spacing:.06em; }
+.clue-habit-note { display:block; margin-top:4px; font-size:.75rem; font-weight:600; color:#76520b; }
 .year-summary-list li { padding:8px 0; }
 .phase-action-panel { width:100%; max-width:none; grid-column:1/-1; background:var(--paper); padding:clamp(12px,2vw,24px); border:1px solid var(--rule); box-sizing:border-box; }
 .phase-action-panel .ready-button { position:static; width:100%; margin-top:12px; }
