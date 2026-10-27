@@ -265,7 +265,7 @@ function initialLiteState(players: PlayerRow[], solo = false): LiteState {
   const moleIndex = crypto.getRandomValues(new Uint32Array(1))[0] % seatRows.length;
   let humanJoinIndex = 0;
   const gamePlayers: GamePlayer[] = seatRows.map((item, seat) => {
-    const avatar = item.isBot ? undefined : (humanJoinIndex++ % 2 === 0 ? "human-avatar-1" : "human-avatar-2");
+    const avatar = item.isBot ? undefined : ("human-avatar-" + ((humanJoinIndex++ % 6) + 1));
     return {
       id: item.row.id, name: item.row.player_name, seat, isBot: item.isBot, avatar,
       ministry: ministries[seat], isMole: seat === moleIndex, ready: false,
